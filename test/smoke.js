@@ -195,7 +195,109 @@ assert(S&&S.v===2,'旧档应升级为 v2, 实际 '+(S&&S.v));
 assert(S.pearl&&typeof S.pearl.trees==='object','旧档迁移应有混沌珠默认结构');
 assert(S.day>=1,'旧档迁移应保留天数');
 
-console.log('✅ 冒烟测试全部通过：22境×13层全流程 / 战斗 / 炼丹 / 九星 / 采药 / 日程 / 混沌珠 / 华云商行 / 存档迁移');
+/* ========== 阶段三：大千世界（千种灵植 / 300+ 丹方 / 45 地图） ========== */
+Math.random=()=>0.01; // 固定随机：成功率判定必成
+assert(Object.keys(HERBS).length>=1000,'灵植应≥1000种, 实际 '+Object.keys(HERBS).length);
+assert(Object.keys(PILLS).length>=300,'丹药应≥300种, 实际 '+Object.keys(PILLS).length);
+assert(RECIPES.length>=300,'丹方应≥300张, 实际 '+RECIPES.length);
+assert(ZONES.length>=40,'地图应≥40张, 实际 '+ZONES.length);
+for(let r=0;r<REALMS.length;r++){
+  const n=ZONES.filter(z=>z.reqR===r&&!z.sect).length;
+  assert(n===2,'每境界应恰有2幅可选地图: r='+r+' 实际 '+n);
+}
+assert(new Set(Object.keys(HERBS)).size===Object.keys(HERBS).length,'灵植 id 应无重复');
+for(const rc of RECIPES){
+  assert(DAN_RANKS[rc.rank]!==undefined,'丹方位阶应合法: '+rc.id);
+  assert((rc.reqR||0)<=21,'丹方境界需求应合法: '+rc.id);
+  if(rc.matsGE)for(const sp of rc.matsGE)
+    assert(HERBS_BY_TIER[sp.t]&&HERBS_BY_TIER[sp.t].length,'丹方 '+rc.id+' 需 '+sp.t+' 品灵植，药池应覆盖');
+}
+/* —— 新式丹方炼制（按品阶取药，低阶先耗） —— */
+S=newState();
+const genId=HERBS_BY_TIER[2][0];
+S.herbs[genId]=50;S.danExp=1e9;S.ap=99;
+assert(danRankIdx()===9,'阅历百万应至丹帝');
+const rc2=RECIPES.find(r=>r.matsGE&&(r.reqR||0)===0&&r.rank===0);
+assert(rc2,'应存在入门新式丹方');
+craft(rc2.id);
+assert((S.pills[rc2.out]||0)===1,'新式丹方应炼成: '+rc2.id);
+assert(S.herbs[genId]===47,'应消耗3株灵植, 实余 '+S.herbs[genId]);
+/* —— 丹方双重解锁（位阶 + 修为境界） —— */
+const rcHi=RECIPES.find(r=>(r.reqR||0)>=5);
+assert(rcHi,'应存在高境界丹方');
+S.danExp=1e9;
+assert(danRankIdx()>=rcHi.rank&&curR()<rcHi.reqR&&!recipeUnlocked(rcHi),'境界不足时丹方应未解锁');
+S.g=rcHi.reqR*LAYER_CNT;
+assert(recipeUnlocked(rcHi),'修为到位后丹方应解锁');
+/* —— 丹药各家族服用生效 —— */
+S=newState();S.ap=99;S.cond=50;
+const famRead={qpsb:()=>(S.buffs.qps&&S.buffs.qps.m)||0,cond:()=>S.cond,qi:()=>S.qi,danxp:()=>S.danExp,ap:()=>S.ap,perm:()=>S.xiusui,hp:()=>S.perm.hp,atk:()=>S.perm.atk,def:()=>S.perm.def};
+for(const f in famRead){
+  const pid=Object.keys(PILLS).find(k=>PILLS[k].f===f&&PILLS[k].m!==undefined);
+  assert(pid,'应存在「'+f+'」家族丹药');
+  S.pills[pid]=3;
+  if(f==='qi')S.qi=0;
+  const before=famRead[f]();
+  usePill(pid);
+  assert(famRead[f]()>before,'服用'+PILLS[pid].n+'应提升 '+f);
+}
+/* —— 回气系：战斗中服用 —— */
+const hpid=Object.keys(PILLS).find(k=>PILLS[k].f==='heal');
+S.pills[hpid]=2;
+startBattle(ZONES[0].id,0);
+B.php=Math.floor(B.pmax*0.2);
+const hpB=B.php;
+usePill(hpid);
+assert(B.php>hpB,'回气系丹药战斗中应恢复气血');
+/* —— 护命系：重伤自动保命 —— */
+const spid=Object.keys(PILLS).find(k=>PILLS[k].f==='save');
+assert(spid,'应存在护命系丹药');
+S.pills[spid]=1;
+B.php=1;
+enemyTurn();
+assert(!B.over&&B.php>=1,'重伤时应自动服用护命丹');
+B=null;
+/* —— 破境系：bestPillOf 选取 —— */
+const bpid=Object.keys(PILLS).find(k=>PILLS[k].f==='break');
+S.pills[bpid]=1;
+assert(bestPillOf('break')===bpid,'bestPillOf 应选中破境系丹药');
+/* —— 服食灵植 —— */
+S=newState();
+const eid=HERBS_BY_TIER[3][0];
+S.herbs[eid]=5;S.ap=10;S.cond=50;S.qi=0;
+eatHerb(eid);
+assert(S.herbs[eid]===4,'服食应消耗1株');
+assert(S.qi>0&&S.ap===9,'服食应得灵气并耗1行动点, 实际 ap='+S.ap);
+/* —— 按品阶整批出售 —— */
+const t3id=HERBS_BY_TIER[3][1];
+S.herbs[t3id]=20;
+const st0=S.stones;
+sellHerbsTier(3,5);
+assert(S.stones>st0,'整批出售应得灵石');
+assert(S.herbs[t3id]===5,'留5株应各留5株, 实余 '+S.herbs[t3id]);
+/* —— 生成地图：采药品阶区间 + 战斗 —— */
+S.ap=999;S.expCd={};
+const gz=ZONES.find(z=>/^z\\d+$/.test(z.id)&&z.reqR===0);
+explore(gz.id);
+assert(Object.keys(S.herbs).some(id=>HERBS[id].t>=gz.ht[0]&&HERBS[id].t<=gz.ht[1]),'生成地图采药应得品阶区间内灵植');
+startBattle(gz.id,0);
+let gn=0;
+while(B&&!B.over&&gn++<500)useSkill('bati');
+assert(B.over,'生成地图小怪战应可完成');
+S.g=12; // 凝血十二层挑战首领
+startBattle(gz.id,2);
+let bn=0;
+while(B&&!B.over&&bn++<500)useSkill('bati');
+assert(B.over&&B.php>0,'凝血十二层应可胜生成地图首领');
+B=null;
+/* —— 渲染冒烟：新页面 —— */
+curTab='hunt';renderAll();
+curTab='alchemy';renderAll();
+curTab='pearl';renderAll();
+curTab='bag';renderAll();
+renderAlchList();renderBagList();
+
+console.log('✅ 冒烟测试全部通过：22境×13层全流程 / 45地图战斗 / 千灵植 / 369丹方 / 丹药12家族 / 服食·整批出售 / 日程 / 混沌珠 / 华云商行 / 存档迁移');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){

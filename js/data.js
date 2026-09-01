@@ -206,3 +206,86 @@ const BEASTS={
 const PILL_BASE_PRICE={huiqi:60,juling:100,pojing:150,xiusui:300,jigu:100,huming:400,xuandan:800,shengsi:1000,shenhuo:1500};
 function pillPrice(pid,r){return Math.floor((PILL_BASE_PRICE[pid]||50)*Math.pow(1.4,r));}
 function corePrice(r){return Math.floor(40*Math.pow(1.5,r));} // 兽核收购价
+
+/* ============================================================
+ * 大千世界（程序生成）：千种灵植 · 三百余丹药 · 诸境地图
+ * ============================================================ */
+
+/* ---------- 千种灵植：10 属性 × 10 品阶 × 10 变体（+10 奇珍 = 1010 种） ---------- */
+const HERB_ATTRS=['金','木','水','火','土','风','雷','光','暗','魂'];
+const HERB_VARS=['霜','月','幽','云','霞','古','龙','凤','神','圣'];
+const HERB_BODIES=['草','参','芝','花','藤','果','莲','兰','葵','蕨'];
+(function(){
+  for(let b=0;b<10;b++)for(let v=0;v<10;v++)for(let a=0;a<10;a++){
+    HERBS['x'+v+''+a+''+b]={n:HERB_VARS[v]+HERB_ATTRS[a]+HERB_BODIES[b],t:b+1,a:a};
+  }
+})();
+const HERBS_BY_TIER=[null];
+for(let t=1;t<=10;t++)HERBS_BY_TIER.push(Object.keys(HERBS).filter(function(id){return HERBS[id].t===t;}));
+
+/* ---------- 丹药：12 系 × 10 品阶 × 3 品质 = 360 种（另有原版 9 种） ---------- */
+const PILL_VARS=[{s:'',m:1},{s:'上品',m:1.8},{s:'极品',m:3.2}];
+const PILL_FAMS=[
+ {base:'回气丹',f:'heal', d:function(t){return '战斗中服用：恢复气血 '+Math.round(Math.min(95,40+6*t))+'%起（随品质提升）。';}},
+ {base:'聚灵丹',f:'qpsb', d:function(t){return '服用后五分钟内修炼速度 +'+(15*t)+'%起（随品质提升）。';}},
+ {base:'破境丹',f:'break', d:function(t){return '冲击境界时自动服用，成功率+'+Math.round(Math.min(35,10+2.5*t))+'%起。';}},
+ {base:'洗髓丹',f:'perm', d:function(t){return '永久全属性 +'+(1.5+0.5*t).toFixed(1)+'%起，可无限叠加。';}},
+ {base:'护命丹',f:'save', d:function(t){return '随身携带，重伤时自动保命，回复 '+Math.round(Math.min(95,45+4*t))+'% 气血。';}},
+ {base:'清神丹',f:'cond', d:function(t){return '立时回复状态 +'+(8+3*t)+'，神清气爽。';}},
+ {base:'蓄元丹',f:'qi', d:function(t){return '立时涌出大量灵气（约合当前层数进度的数成）。';}},
+ {base:'启灵丹',f:'danxp', d:function(t){return '丹修阅历 +'+(15+25*t)+'，炼丹一途日进斗金。';}},
+ {base:'行气丹',f:'ap', d:function(t){return '今日行动点 +'+Math.min(10,1+Math.ceil(t/2))+'（当日有效）。';}},
+ {base:'锻体丹',f:'hp', d:function(t){return '永久气血 +'+(1+0.4*t).toFixed(1)+'%起。';}},
+ {base:'罡气丹',f:'atk', d:function(t){return '永久攻击 +'+(1+0.4*t).toFixed(1)+'%起。';}},
+ {base:'凝神丹',f:'def', d:function(t){return '永久防御 +'+(1+0.4*t).toFixed(1)+'%起。';}},
+];
+(function(){
+  for(let fi=0;fi<PILL_FAMS.length;fi++)for(let t=1;t<=10;t++)for(let v=0;v<3;v++){
+    const F=PILL_FAMS[fi],V=PILL_VARS[v];
+    PILLS['g'+fi+'_'+t+'_'+v]={n:V.s+F.base,f:F.f,t:t,m:V.m,d:F.d(t)};
+  }
+})();
+
+/* ---------- 丹方（共 369 张：境界 + 位阶 双重解锁） ---------- */
+(function(){
+  for(let fi=0;fi<PILL_FAMS.length;fi++)for(let t=1;t<=10;t++)for(let v=0;v<3;v++){
+    const pid='g'+fi+'_'+t+'_'+v;
+    const matsGE=t>1?[{t:t-1,n:2+v},{t:t,n:1+v}]:[{t:1,n:3+v}];
+    RECIPES.push({id:'r_'+pid,out:pid,
+      rank:Math.min(9,Math.max(0,Math.floor((t-1)*1.05+v*0.5))),
+      reqR:Math.max(0,(t-1)*2+v),
+      matsGE:matsGE,shouhe:t>1?Math.ceil(t/2)+v:0});
+  }
+})();
+
+/* ---------- 诸境地图：为每个境界补足历练之地（共 34 幅） ---------- */
+const ZN_PRE=['青云','赤炎','玄冰','落星','幽冥','万妖','流沙','碧波','焚天','镇魔','迷雾','雷泽','荒古','天罡','地煞','锁灵','寒渊','伏龙'];
+const ZN_SUF=['山脉','秘境','深渊','古域','泽地','荒原','洞天','遗迹','禁地','断谷'];
+const ZN_MOD=['赤鳞','玄甲','碧目','白骨','黑风','紫鬃','银角','血瞳','狂暴','远古','霜牙','雷翼'];
+const ZN_BEAST=['狼','虎','蟒','鹰','猿','熊','蛟','蜥','蝎','蛛','鸦','狮','豹','龟','犀','鹿','狐'];
+(function(){
+  const cnt={};ZONES.forEach(function(z){ if(!z.sect)cnt[z.reqR]=(cnt[z.reqR]||0)+1; });
+  let zi=0;
+  for(let r=0;r<REALMS.length;r++){
+    const add=Math.max(0,2-(cnt[r]||0));
+    for(let k=0;k<add;k++){
+      const en=[
+        {n:ZN_MOD[(zi*5)%12]+ZN_BEAST[(zi*7)%17],r:Math.min(21,r),m:0.9},
+        {n:ZN_MOD[(zi*5+3)%12]+ZN_BEAST[(zi*7+5)%17],r:Math.min(21,r+(k%2)),m:1.3},
+        {n:ZN_MOD[(zi*5+6)%12]+ZN_BEAST[(zi*7+9)%17]+'王',r:Math.min(21,r+1),m:2.4,boss:1}
+      ];
+      ZONES.push({id:'z'+zi,name:ZN_PRE[zi%18]+ZN_SUF[(zi*3+1)%10],reqR:r,herbs:[],
+        ht:[Math.max(1,Math.min(10,r)),Math.min(10,r+2)],
+        d:REALMS[r].name+'修士常往之地，妖兽横行，灵物颇丰。',
+        enemies:en});
+      zi++;
+    }
+  }
+})();
+
+/* ---------- 生成丹药收购价 ---------- */
+function pillPrice(pid,r){
+  const p=PILLS[pid];
+  if(p&&p.m!==undefined)return Math.floor(30*Math.pow(1.75,p.t)*p.m*Math.pow(1.35,r));
+  return Math.floor((PILL_BASE_PRICE[pid]||50)*Math.pow(1.4,r));
+}

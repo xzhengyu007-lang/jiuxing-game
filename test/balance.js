@@ -54,6 +54,15 @@ for(const c of full){
   const en=ZONES.find(z=>z.id===c[2]).enemies[c[3]];
   console.log((res.win?'胜':'败')+'  '+REALMS[c[0]].name+'初期 vs '+en.n+'（'+res.turns+'回合）');
 }
+console.log('--- vs 每境生成图首领（每境2幅生成图） ---');
+for(let r=0;r<REALMS.length;r++){
+  const gz=ZONES.find(z=>/^z\\d+$/.test(z.id)&&z.reqR===r);
+  if(!gz)continue;
+  stateAt(r,6,true);
+  const res=simFight(gz.id,2);
+  const en=gz.enemies[2];
+  console.log((res.win?'胜':'败')+'  '+REALMS[r].name+'七层满配 vs '+gz.name+'·'+en.n+'（'+res.turns+'回合）');
+}
 `;
 fs.writeFileSync(path.join(__dirname,'balance_probe.js'),code+probe);
 require('./balance_probe.js');

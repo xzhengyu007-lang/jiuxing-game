@@ -34,9 +34,9 @@ function newState(){
     herbs:{}, pills:{}, mats:{shouhe:0},
     bones:0, starsOpened:[], danExp:0,
     equips:{}, wearing:{weapon:null,armor:null,treasure:null,acc:null},
-    xiusui:0, kills:{}, quests:{},
+    xiusui:0, perm:{hp:0,atk:0,def:0}, kills:{}, quests:{},
     flags:{intro:0,gumu:0,siguo:0,sect:0,pearl:0,fireSeed:null,sijie:0,mingxing:0,won:0},
-    buffs:{julingUntil:0},
+    buffs:{julingUntil:0,qps:null},
     autobreak:0, usePojing:1, speed:1,
     day:1, ap:apMax(0), cond:100,
     pearl:{plants:[],trees:[],beasts:[]},
@@ -68,7 +68,9 @@ function buffMult(){
   let m=1;
   if(S.flags.sect)m*=1.5;
   if(S.wearing.acc==='julingzhui')m*=1.35;
-  if(Date.now()<S.buffs.julingUntil)m*=1.6;
+  let qbuff=Date.now()<S.buffs.julingUntil?1.6:1;
+  if(S.buffs.qps&&Date.now()<S.buffs.qps.until)qbuff=Math.max(qbuff,S.buffs.qps.m);
+  m*=qbuff;
   m*=1+0.03*S.xiusui;
   m*=1+S.flags.sijie;
   return m;
@@ -87,6 +89,7 @@ function heroStats(){
   let def=(5+1.5*l)*Math.pow(2.0,r);
   const extra=(1+0.05*S.bones)*(1+0.18*starCnt())*(1+0.03*S.xiusui)*(1+S.flags.sijie)*(0.5+0.5*S.cond/100);
   hp*=extra;atk*=extra;def*=extra;
+  hp*=(1+(S.perm.hp||0)/100);atk*=(1+(S.perm.atk||0)/100);def*=(1+(S.perm.def||0)/100);
   if(S.flags.mingxing){hp*=1.1;atk*=1.1;def*=1.1;}
   if(starCnt()>=9){hp*=2;atk*=2;def*=2;}
   for(const slot in S.wearing){
@@ -102,6 +105,51 @@ function danRankIdx(){
   for(let i=0;i<DAN_EXP.length;i++){ if(S.danExp>=DAN_EXP[i])idx=i; }
   return idx;
 }
+/* ---------- 大千世界辅助：按品阶消耗 / 掉落 / 最强丹药 ---------- */
+function herbsGE(t){ // 拥有的 ≥t 品灵植总数
+  let c=0;
+  for(const id in S.herbs){ const h=HERBS[id]; if(h&&h.t>=t)c+=S.herbs[id]; }
+  return c;
+}
+function consumeHerbsGE(t,n){ // 从低品阶开始消耗 n 株 ≥t 品灵植
+  const ids=Object.keys(S.herbs)
+    .filter(id=>S.herbs[id]>0&&HERBS[id]&&HERBS[id].t>=t)
+    .sort((a,b)=>HERBS[a].t-HERBS[b].t);
+  for(const id of ids){
+    if(n<=0)break;
+    const take=Math.min(n,S.herbs[id]);
+    S.herbs[id]-=take; n-=take;
+  }
+  return n<=0;
+}
+function randHerbTier(lo,hi){ // 掉落一株区间内随机灵植
+  const t=irnd(Math.max(1,lo),Math.min(10,hi));
+  const arr=HERBS_BY_TIER[t];
+  return arr[irnd(0,arr.length-1)];
+}
+/* 地图灵植掉落：有名产地出固定名产，无名的荒野新图按品阶区间随机 */
+function dropHerb(z){
+  if(z.herbs&&z.herbs.length)return pick(z.herbs);
+  return randHerbTier(z.ht?z.ht[0]:1,z.ht?z.ht[1]:3);
+}
+function bestPillOf(fam){ // 拥有的最强某系丹药 id
+  let best=null,bb=-1;
+  for(const pid in S.pills){
+    const p=PILLS[pid];
+    if((S.pills[pid]||0)>0&&p&&p.f===fam){ const sc=p.t*p.m; if(sc>bb){bb=sc;best=pid;} }
+  }
+  return best;
+}
+function breakBonus(p){ // 破境系加成
+  if(!p)return 0;
+  return (p.f==='break')?Math.min(0.35,0.10+0.025*p.t*p.m):0;
+}
+function savePct(p){ // 护命系回复比例
+  if(!p)return 0.5;
+  return Math.min(0.95,0.45+0.04*p.t);
+}
+function herbAttrsMatch(h){ return S.flags.fireSeed&&h.a!==undefined&&HERB_ATTRS[h.a]===S.flags.fireSeed; }
+function recipeUnlocked(rc){ return danRankIdx()>=rc.rank&&(rc.reqR||0)<=curR(); }
 /* ---------------- 日程 / 状态 / 行动点 ---------------- */
 function useAp(n,label){
   if(S.ap<n){toast('「'+label+'」行动点不足（今日余 '+S.ap+' 点）——可回修炼页「日落而息」进入下一日');return false;}
@@ -188,7 +236,10 @@ function tryBreak(){
       S.qi-=cost;P={type:'sijie',cost:cost};beginSijie();return;
     }else if(REALMS[toR].trib){p=REALMS[toR].trib;}
   }
-  if(S.usePojing&&(S.pills.pojing||0)>0&&p<0.96){S.pills.pojing--;p+=0.2;}
+  if(S.usePojing&&p<0.97){
+    const bp=bestPillOf('break');
+    if(bp){S.pills[bp]--;const bb=(bp==='pojing')?0.2:breakBonus(PILLS[bp]);p+=bb;}
+  }
   p=clamp(p,0.2,0.99);
   if(Math.random()<p){
     doAdvance(cost);
@@ -312,25 +363,41 @@ function craft(rid){
   const rc=RECIPES.find(r=>r.id===rid); if(!rc)return;
   const myRank=danRankIdx();
   if(myRank<rc.rank){toast('丹修位阶不足：需 '+DAN_RANKS[rc.rank]+'（当前 '+DAN_RANKS[myRank]+'）');return;}
-  for(const m in rc.mats){
-    const have=(S.herbs[m]||0)+(m==='shouhe'?(S.mats.shouhe||0):0);
-    if(have<rc.mats[m]){toast('材料不足：'+(HERBS[m]?HERBS[m].n:MATS[m].n)+' x'+rc.mats[m]);return;}
-  }
-  if(!useAp(AP_CRAFT,'炼丹'))return;
-  for(const m in rc.mats){
-    if(m==='shouhe')S.mats.shouhe-=rc.mats[m];
-    else S.herbs[m]-=rc.mats[m];
+  if((rc.reqR||0)>curR()){toast('修为不足：此丹方需 '+REALMS[rc.reqR].name+'方可参悟');return;}
+  if(rc.matsGE){ // 新式丹方：按品阶取药（千种灵植皆可入药）
+    for(const sp of rc.matsGE){
+      if(herbsGE(sp.t)<sp.n){toast('材料不足：需 '+sp.n+' 株 '+sp.t+' 品及以上灵植（现有 '+herbsGE(sp.t)+'）');return;}
+    }
+    if(rc.shouhe&&(S.mats.shouhe||0)<rc.shouhe){toast('材料不足：兽核 x'+rc.shouhe);return;}
+    if(!useAp(AP_CRAFT,'炼丹'))return;
+    for(const sp of rc.matsGE)consumeHerbsGE(sp.t,sp.n);
+    if(rc.shouhe)S.mats.shouhe-=rc.shouhe;
+  }else{ // 旧式丹方：指定药材
+    for(const m in rc.mats){
+      const have=(S.herbs[m]||0)+(m==='shouhe'?(S.mats.shouhe||0):0);
+      if(have<rc.mats[m]){toast('材料不足：'+(HERBS[m]?HERBS[m].n:MATS[m].n)+' x'+rc.mats[m]);return;}
+    }
+    if(!useAp(AP_CRAFT,'炼丹'))return;
+    for(const m in rc.mats){
+      if(m==='shouhe')S.mats.shouhe-=rc.mats[m];
+      else S.herbs[m]-=rc.mats[m];
+    }
   }
   const p=clamp(0.62+0.07*(myRank-rc.rank),0.15,0.95);
   if(Math.random()<p){
     S.pills[rc.out]=(S.pills[rc.out]||0)+1;
-    S.danExp+=rc.exp;
-    log('good','丹成！【'+PILLS[rc.out].n+'】x1（丹修 '+DAN_RANKS[myRank]+' +'+rc.exp+' 阅历）');
+    S.danExp+=(rc.exp||10);
+    log('good','丹成！【'+PILLS[rc.out].n+'】x1（丹修 '+DAN_RANKS[myRank]+' +'+(rc.exp||10)+' 阅历）');
   }else{
-    for(const m in rc.mats){
-      const back=Math.floor(rc.mats[m]/2);
-      if(back<=0)continue;
-      if(m==='shouhe')S.mats.shouhe+=back;else S.herbs[m]=(S.herbs[m]||0)+back;
+    if(rc.matsGE){
+      for(const sp of rc.matsGE)consumeHerbsGE(sp.t,Math.floor(sp.n/2));
+      if(rc.shouhe)S.mats.shouhe+=Math.floor(rc.shouhe/2);
+    }else{
+      for(const m in rc.mats){
+        const back=Math.floor(rc.mats[m]/2);
+        if(back<=0)continue;
+        if(m==='shouhe')S.mats.shouhe+=back;else S.herbs[m]=(S.herbs[m]||0)+back;
+      }
     }
     log('bad','炉火失控，炸炉了……抢回一半药材。');
   }
@@ -339,6 +406,7 @@ function craft(rid){
 function usePill(pid){
   if(!S)return;
   if((S.pills[pid]||0)<1)return;
+  const p=PILLS[pid];
   if(pid==='huiqi'){
     if(B&&!B.over){
       S.pills.huiqi--;
@@ -350,10 +418,65 @@ function usePill(pid){
   if(pid==='juling'){
     S.pills.juling--;S.buffs.julingUntil=Date.now()+300000;
     log('good','聚灵丹入腹，周身灵气如潮——五分钟内修炼速度+60%！');
-  }else if(pid==='xiusui'){
+    renderAll();save();return;
+  }
+  if(pid==='xiusui'){
     S.pills.xiusui--;S.xiusui++;
-    log('good','洗髓易骨，脱胎换骨——永久属性+3%（叠加 '+S.xiusui+' 层）。');
-  }else{toast(PILLS[pid].n+'为触发类丹药，会在相应时机自动使用。');return;}
+    log('good','洗髓易骨，脱胎换骨——永久属性+3%（叠加 '+Math.round(S.xiusui*10)/10+' 层）。');
+    renderAll();save();return;
+  }
+  if(!p||p.m===undefined){toast(PILLS[pid].n+'为触发类丹药，会在相应时机自动使用。');return;}
+  const t=p.t,m=p.m;
+  switch(p.f){
+    case 'heal':
+      if(B&&!B.over){
+        S.pills[pid]--;
+        const pct=Math.min(0.95,(0.40+0.06*t)*Math.min(m,2));
+        B.php=Math.min(B.pmax,B.php+B.pmax*pct);
+        battleLog('你吞下'+p.n+'，气血恢复 '+Math.round(pct*100)+'%！','good');
+        renderBattle();return;
+      }
+      toast('回气类丹药须在战斗中使用。');return;
+    case 'qpsb':{
+      const nm=1+0.15*t*m;
+      S.pills[pid]--;
+      if(!S.buffs.qps||Date.now()>=S.buffs.qps.until||nm>S.buffs.qps.m)S.buffs.qps={until:Date.now()+300000,m:nm};
+      log('good',p.n+'入腹，灵气如潮——五分钟内修炼速度 +'+Math.round((nm-1)*100)+'%！');break;
+    }
+    case 'perm':{
+      const v=(1.5+0.5*t)*m;
+      S.pills[pid]--;S.xiusui+=v/3;
+      log('good',p.n+'化开，脱胎换骨——永久全属性 +'+v.toFixed(1)+'%（叠加至 '+Math.round(S.xiusui*10)/10+' 层）。');break;
+    }
+    case 'cond':{
+      const v=Math.min(100-S.cond,(8+3*t)*m);
+      if(v<=0){toast('状态饱满，不必浪费丹药。');return;}
+      S.pills[pid]--;S.cond+=v;
+      log('good','服下'+p.n+'，神清气爽：状态 +'+Math.round(v)+'。');break;
+    }
+    case 'qi':{
+      S.pills[pid]--;
+      const g=layerCost()*(0.4+0.4*t)*Math.min(m,2);
+      S.qi+=g;
+      log('good',p.n+'化作磅礴灵气：灵气 +'+fmt(g)+'。');break;
+    }
+    case 'danxp':{
+      S.pills[pid]--;S.danExp+=(15+25*t)*m;
+      log('good',p.n+'启灵开智：丹修阅历 +'+fmt((15+25*t)*m)+'。');break;
+    }
+    case 'ap':{
+      const g=Math.min(10,Math.ceil((1+t/2)*Math.min(m,2)));
+      S.pills[pid]--;S.ap+=g;
+      log('good',p.n+'行气周天：今日行动点 +'+g+'。');break;
+    }
+    case 'hp':case 'atk':case 'def':{
+      const v=Math.min(15,(1+0.4*t)*m/2);
+      S.pills[pid]--;S.perm[p.f]=(S.perm[p.f]||0)+v;
+      log('good',p.n+'淬炼肉身：永久'+({hp:'气血',atk:'攻击',def:'防御'})[p.f]+' +'+v.toFixed(1)+'%。');break;
+    }
+    default:
+      toast(p.n+'为触发类丹药，会在相应时机自动使用。');return;
+  }
   renderAll();save();
 }
 
@@ -371,6 +494,33 @@ function sellHerb(hid,qty){
   const price=Math.floor(6*Math.pow(1.6,t))*qty;
   S.herbs[hid]-=qty;S.stones+=price;
   toast('售出 '+HERBS[hid].n+' x'+qty+'，得灵石 '+fmt(price));
+  renderAll();save();
+}
+/* 服食灵植：耗费 1 行动点，得灵气与状态（属性合神火则加成） */
+function eatHerb(hid){
+  const h=HERBS[hid]; if(!h||((S.herbs[hid]||0)<1))return;
+  if(!useAp(AP_EXPLORE,'服食'))return;
+  S.herbs[hid]--;
+  const mult=herbAttrsMatch(h)?1.5:1;
+  const qi=layerCost()*0.12*h.t*mult;
+  const cd=Math.min(100-S.cond,Math.ceil(h.t/2)*mult);
+  S.qi+=qi;S.cond+=cd;
+  log('good','服食【'+h.n+'】（'+h.t+'品'+(herbAttrsMatch(h)?' · 合神火属性':'')+'）：灵气 +'+fmt(qi)+(cd>0?('，状态 +'+Math.ceil(cd)):'')+'。');
+  renderAll();save();
+}
+/* 按品阶整批出售灵植 */
+function sellHerbsTier(t,keep){
+  let n=0,price=0;
+  for(const id in S.herbs){
+    const h=HERBS[id];
+    if(h&&h.t===t&&S.herbs[id]>0){
+      const take=keep?Math.max(0,S.herbs[id]-keep):S.herbs[id];
+      if(take>0){n+=take;price+=herbPrice(t)*take;S.herbs[id]-=take;}
+    }
+  }
+  if(n<=0){toast('没有 '+t+' 品灵植可售');return;}
+  S.stones+=price;
+  toast('售出 '+t+' 品灵植 x'+n+'，得灵石 '+fmt(price));
   renderAll();save();
 }
 function buy(item){
@@ -468,9 +618,12 @@ function enemyTurn(){
     B.php-=dmg;
     battleLog('【'+B.e.n+'】扑击而来，你受到 '+fmt(dmg)+' 伤害。','bad');
     if(B.php<=0){
-      if((S.pills.huming||0)>0){
-        S.pills.huming--;B.php=Math.floor(B.pmax*0.5);
-        battleLog('危急关头，护命丹自行碎裂——金光护体，你从鬼门关前走了回来！','good');
+      const sp=(S.pills.huming||0)>0?'huming':bestPillOf('save');
+      if(sp){
+        S.pills[sp]--;
+        const pct=(sp==='huming')?0.5:savePct(PILLS[sp]);
+        B.php=Math.max(1,Math.floor(B.pmax*pct));
+        battleLog('危急关头，'+PILLS[sp].n+'自行碎裂——宝光护体，你从鬼门关前走了回来！','good');
       }else{
         B.over=true;
         const lost=Math.floor(S.qi*0.1);
@@ -492,7 +645,10 @@ function winBattle(){
   S.stones+=stones;
   let drops='灵石 x'+fmt(stones);
   if(ed.r>=2&&Math.random()<0.55){S.mats.shouhe=(S.mats.shouhe||0)+1;drops+='，兽核 x1';}
-  if(Math.random()<0.25&&z.herbs.length){const h=pick(z.herbs);S.herbs[h]=(S.herbs[h]||0)+1;drops+='，'+HERBS[h].n+' x1';}
+  if(Math.random()<0.35){
+    const h=dropHerb(z);
+    S.herbs[h]=(S.herbs[h]||0)+1;drops+='，'+HERBS[h].n+' x1';
+  }
   const qiGain=qps()*3;S.qi+=qiGain;
   battleLog('【'+ed.n+'】轰然倒下！获得 '+drops+'，战意化灵，灵气+'+fmt(qiGain)+'。','good');
   log('good','斩杀【'+ed.n+'】！'+drops);
@@ -543,7 +699,7 @@ function explore(zid){
   if(Date.now()<cdUntil)return;
   if(!useAp(AP_EXPLORE,'采药'))return;
   S.expCd[zid]=Date.now()+3000;
-  const h=pick(z.herbs);
+  const h=dropHerb(z);
   const n=irnd(2,5);
   S.herbs[h]=(S.herbs[h]||0)+n;
   const st=Math.floor(15*Math.pow(1.55,z.enemies[0].r)*rnd(0.8,1.3));
@@ -676,11 +832,12 @@ function showVictory(){
 }
 
 /* ---------------- 混沌珠：灵植 / 神树 / 灵兽 ---------------- */
+function seedReqR(t){return Math.max(0,(t-1)*2);} // 种子随境界进货
 function plantHerb(hid){
   if(!S.flags.pearl){toast('尚未获得混沌珠');return;}
-  const sd=SEEDS[hid]; if(!sd)return;
-  if(curR()<sd.reqR){toast('坊市尚未进货此等灵植种子');return;}
-  const cost=seedCost(HERBS[hid].t);
+  const h=HERBS[hid]; if(!h)return;
+  if(curR()<seedReqR(h.t)){toast('坊市尚未进货此等灵植种子：需 '+REALMS[seedReqR(h.t)].name);return;}
+  const cost=seedCost(h.t);
   if(S.stones<cost){toast('种子费不足：需 '+fmt(cost)+' 灵石');return;}
   if(!useAp(AP_PLANT,'种植'))return;
   S.stones-=cost;
@@ -915,6 +1072,18 @@ function renderCult(){
    '</div>';
   const box=$('log');if(box&&nearBottom(box))box.scrollTop=box.scrollHeight;
 }
+function battlePillBtns(){
+  // 战斗丹药栏：回气系丹药按强弱取前 3（回气丹恒在首位）
+  let btns='';
+  if((S.pills.huiqi||0)>0)btns+='<button class="btn jade" '+(B.over?'disabled':'')+' onclick="usePill(\'huiqi\')">回气丹<div class="small">x'+S.pills.huiqi+'</div></button>';
+  const heals=Object.keys(S.pills).filter(pid=>(S.pills[pid]||0)>0&&PILLS[pid]&&PILLS[pid].f==='heal')
+    .sort((a,b)=>PILLS[b].t*PILLS[b].m-PILLS[a].t*PILLS[a].m).slice(0,3);
+  for(const pid of heals){
+    const p=PILLS[pid];
+    btns+='<button class="btn jade" '+(B.over?'disabled':'')+' onclick="usePill(\''+pid+'\')">'+p.n+'<div class="small">回'+Math.round(Math.min(0.95,(0.40+0.06*p.t)*Math.min(p.m,2))*100)+'% · x'+S.pills[pid]+'</div></button>';
+  }
+  return btns;
+}
 function renderHunt(){
   let html='';
   if(B){
@@ -929,8 +1098,7 @@ function renderHunt(){
      '<div class="bar mp" style="margin-top:3px"><i style="width:'+clamp(B.mp/B.mpmax*100,0,100)+'%"></i><span>灵力 '+Math.floor(B.mp)+'</span></div></div>'+
      '<div class="fighter"><div class="nm"><span class="'+(B.e.boss?'blood':'')+'">'+B.e.n+'</span><span>'+fmt(Math.max(0,B.ehp))+' / '+fmt(B.emax)+'</span></div>'+
      '<div class="bar ehp"><i style="width:'+clamp(B.ehp/B.emax*100,0,100)+'%"></i><span>气血</span></div></div>'+
-     '<div class="skills">'+sk+
-       ((S.pills.huiqi||0)>0?'<button class="btn jade" '+(B.over?'disabled':'')+' onclick="usePill(\'huiqi\')">回气丹<div class="small">x'+S.pills.huiqi+'</div></button>':'')+
+     '<div class="skills">'+sk+battlePillBtns()+
      '</div>'+
      '<div class="battlelog">'+B.log.map(l=>'<p class="'+l.c+'">'+l.x+'</p>').join('')+'</div>'+
      '<div style="margin-top:8px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">'+
@@ -938,63 +1106,135 @@ function renderHunt(){
        (B.over?'<button class="btn" onclick="endBattleView()">离开战斗</button>':'<button class="btn danger" onclick="flee()">逃跑</button>')+
      '</div></div>';
   }
-  html+=ZONES.filter(zoneUnlocked).map(z=>{
-    const cd=S.expCd[z.id]||0;
-    const cdLeft=Math.max(0,Math.ceil((cd-Date.now())/1000));
-    return '<div class="zone"><h4>'+z.name+'</h4><p class="small muted">'+z.d+'</p>'+
-     z.enemies.map((e,i)=>{
-       const killed=S.kills[z.id+':'+i]||0;
-       return '<div class="enemy"><span>'+e.n+'<span class="tag">'+REALMS[e.r].name+'</span>'+(e.boss?'<span class="boss-tag">首领</span>':'')+(killed?'<span class="tag rank">斩'+killed+'</span>':'')+'</span>'+
-        '<button class="btn" onclick="startBattle(\''+z.id+'\','+i+')">出战</button></div>';
-     }).join('')+
-     '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">'+
-       '<span class="small muted">采药可得：'+z.herbs.map(h=>HERBS[h].n).join('、')+'</span>'+
-       '<button class="btn jade" '+(cdLeft>0?'disabled':'')+' onclick="explore(\''+z.id+'\')">'+(cdLeft>0?('采药 '+cdLeft+'s'):'采药 · 寻宝')+'</button>'+
-     '</div></div>';
-  }).join('');
-  const locked=ZONESLIST();
-  if(locked.length)html+='<p class="small muted">未解锁：'+locked.map(z=>z.name+'（需 '+REALMS[z.reqR].name+(z.sect?' · 紫血宗':'')+'）').join('、')+'</p>';
+  html+=renderZoneGroups();
   $('main').innerHTML=html;
   const bl=document.querySelector('.battlelog');
   if(bl&&nearBottom(bl))bl.scrollTop=bl.scrollHeight;
 }
+function zoneCard(z){
+  const cd=S.expCd[z.id]||0;
+  const cdLeft=Math.max(0,Math.ceil((cd-Date.now())/1000));
+  const ht0=(z.ht&&z.ht[0])||1, ht1=(z.ht&&z.ht[1])||Math.max(2,curR()+2);
+  const herbTxt=z.herbs&&z.herbs.length
+    ?(z.herbs.map(h=>HERBS[h].n).join('、')+'，另有'+ht0+'–'+ht1+'品灵植')
+    :('可得 '+ht0+'–'+ht1+' 品灵植');
+  return '<div class="zone"><h4>'+z.name+'</h4><p class="small muted">'+z.d+'</p>'+
+   z.enemies.map((e,i)=>{
+     const killed=S.kills[z.id+':'+i]||0;
+     return '<div class="enemy"><span>'+e.n+'<span class="tag">'+REALMS[e.r].name+'</span>'+(e.boss?'<span class="boss-tag">首领</span>':'')+(killed?'<span class="tag rank">斩'+killed+'</span>':'')+'</span>'+
+      '<button class="btn" onclick="startBattle(\''+z.id+'\','+i+')">出战</button></div>';
+   }).join('')+
+   '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+     '<span class="small muted">采药：'+herbTxt+'</span>'+
+     '<button class="btn jade" '+(cdLeft>0?'disabled':'')+' onclick="explore(\''+z.id+'\')">'+(cdLeft>0?('采药 '+cdLeft+'s'):'采药 · 寻宝')+'</button>'+
+   '</div></div>';
+}
+function renderZoneGroups(){
+  // 地图按境界分组：当前境界展开，往昔地界折叠，远处地界另列
+  let html='';
+  for(let r=0;r<=curR();r++){
+    const zs=ZONES.filter(z=>zoneUnlocked(z)&&z.reqR===r);
+    if(!zs.length)continue;
+    const cards=zs.map(zoneCard).join('');
+    if(r===curR())html+=cards;
+    else html+='<details class="zgrp"><summary>往昔地界 · '+REALMS[r].name+'（'+zs.length+' 处地图）</summary>'+cards+'</details>';
+  }
+  const locked=ZONESLIST().filter(z=>z.reqR>curR());
+  if(locked.length){
+    let inner='';
+    for(let r=curR()+1;r<REALMS.length;r++){
+      const zs=locked.filter(z=>z.reqR===r&&!z.sect);
+      if(zs.length)inner+='<div class="small muted" style="margin:2px 0">'+REALMS[r].name+'：'+zs.map(z=>z.name).join('、')+'</div>';
+    }
+    const sect=locked.filter(z=>z.sect);
+    if(sect.length)inner+='<div class="small muted" style="margin:2px 0">紫血宗属地（拜入宗门后开启）：'+sect.map(z=>z.name).join('、')+'</div>';
+    html+='<details class="zgrp"><summary>远处地界 · 尚未踏足（'+locked.length+' 处，随修为解锁）</summary>'+inner+'</details>';
+  }
+  return html;
+}
 function ZONESLIST(){return ZONES.filter(z=>!zoneUnlocked(z));}
 function renderBattle(){ if(curTab==='hunt')renderHunt(); }
+let alchTier=0,alchQ='',alchOnly=1,alchN=40;
+let bagTier=0,bagAttr=-1,bagQ='',bagN=60;
+let pearlTier=1;
+function matsTxt(rc){
+  if(rc.mats)return Object.keys(rc.mats).map(m=>{
+    const need=rc.mats[m];
+    const have=(m==='shouhe'?(S.mats.shouhe||0):(S.herbs[m]||0));
+    return (HERBS[m]?HERBS[m].n:MATS[m].n)+' <span class="'+(have>=need?'jade':'blood')+'">'+have+'/'+need+'</span>';
+  }).join('，');
+  return (rc.matsGE||[]).map(sp=>{
+    const have=herbsGE(sp.t);
+    return sp.n+' 株'+sp.t+'品<span class="'+(have>=sp.n?'jade':'blood')+'">（有'+have+'）</span>';
+  }).join('，')+(rc.shouhe?('，兽核 <span class="'+((S.mats.shouhe||0)>=rc.shouhe?'jade':'blood')+'">'+(S.mats.shouhe||0)+'/'+rc.shouhe+'</span>'):'');
+}
+function renderAlchList(){
+  const rank=danRankIdx();
+  let list=RECIPES.filter(rc=>{
+    const out=PILLS[rc.out]; if(!out)return false;
+    if(alchTier&&out.t!==alchTier)return false;
+    if(alchQ&&out.n.indexOf(alchQ)<0)return false;
+    if(alchOnly&&!recipeUnlocked(rc))return false;
+    return true;
+  });
+  list.sort((a,b)=>(recipeUnlocked(b)-recipeUnlocked(a))||((a.reqR||0)-(b.reqR||0))||(a.rank-b.rank));
+  const total=list.length;
+  list=list.slice(0,alchN);
+  const rows=list.map(rc=>{
+    const out=PILLS[rc.out];
+    const ok=recipeUnlocked(rc);
+    const tags='<span class="tag rank">'+DAN_RANKS[rc.rank]+'</span>'+
+      (out.t?'<span class="tag">'+out.t+'品</span>':'')+
+      ((rc.reqR||0)>0?'<span class="tag">'+REALMS[rc.reqR].name+'</span>':'')+
+      (ok?'':'<span class="tag no">未参悟</span>');
+    return '<div class="row-item"><div class="info"><div class="nm">'+out.n+tags+'</div>'+
+     '<div class="small muted">'+out.d+'</div><div class="small">材料：'+matsTxt(rc)+'</div></div>'+
+     '<button class="btn" '+(ok?'':'disabled')+' onclick="craft(\''+rc.id+'\')">炼制</button></div>';
+  }).join('');
+  const box=document.getElementById('alchList');
+  if(!box)return;
+  box.innerHTML='<p class="small muted">共 '+total+' 张丹方符合筛选'+(total>alchN?('，显示前 '+alchN+' 张'):'')+'</p>'+rows+
+   (total>alchN?'<div style="text-align:center;margin:8px"><button class="btn ghost" onclick="alchN+=60;renderAlchList()">显示更多</button></div>':'');
+}
 function renderAlchemy(){
   const rank=danRankIdx();
   const next=DAN_EXP[rank+1];
+  const tierOpts=[0,1,2,3,4,5,6,7,8,9,10].map(t=>'<option value="'+t+'"'+(alchTier===t?' selected':'')+'>'+(t?('限 '+t+' 品'):'不限品阶')+'</option>').join('');
   $('main').innerHTML='<div class="grid2"><div>'+
    '<div class="panel"><h3>丹修 · '+DAN_RANKS[rank]+'</h3>'+
-   '<p class="small">丹帝记忆觉醒，炼丹神术信手拈来。丹修位阶：丹童 → 丹徒 → 丹士 → 丹师 → 丹王 → 丹皇 → 丹宗 → 丹尊 → 丹圣 → 丹帝。</p>'+
+   '<p class="small">丹帝记忆觉醒，炼丹神术信手拈来。丹修位阶：丹童 → 丹徒 → 丹士 → 丹师 → 丹王 → 丹皇 → 丹宗 → 丹尊 → 丹圣 → 丹帝。共 '+RECIPES.length+' 张丹方，随「丹修位阶 + 修为境界」双重参悟解锁。</p>'+
    '<div class="bar" style="margin:8px 0"><i style="width:'+(next?clamp(S.danExp/next*100,0,100):100)+'%"></i><span>阅历 '+fmt(S.danExp)+(next?' / '+fmt(next):'（圆满）')+'</span></div>'+
-   '<p class="small muted">位阶越高，炼丹成功率越高（+7%/阶），可炼丹方越多。</p></div>'+
-   '<div class="panel"><h3>丹方</h3>'+
-   RECIPES.map(rc=>{
-     const ok=rank>=rc.rank;
-     const mats=Object.keys(rc.mats).map(m=>{
-       const have=(m==='shouhe'?(S.mats.shouhe||0):(S.herbs[m]||0));
-       return (HERBS[m]?HERBS[m].n:MATS[m].n)+' <span class="'+(have>=rc.mats[m]?'jade':'blood')+'">'+have+'/'+rc.mats[m]+'</span>';
-     }).join('，');
-     return '<div class="row-item"><div class="info"><div class="nm">'+PILLS[rc.out].n+
-       '<span class="tag rank">'+DAN_RANKS[rc.rank]+'</span>'+(ok?'':'<span class="tag no">位阶不足</span>')+'</div>'+
-       '<div class="small muted">'+PILLS[rc.out].d+'</div><div class="small">材料：'+mats+'</div></div>'+
-       '<button class="btn" '+(ok?'':'disabled')+' onclick="craft(\''+rc.id+'\')">炼制</button></div>';
-   }).join('')+
-   '</div></div><div>'+
-   '<div class="panel"><h3>丹药仓库</h3>'+
-   Object.keys(PILLS).map(pid=>{
-     const n=S.pills[pid]||0;
-     const usable=(pid==='juling'||pid==='xiusui'||pid==='huiqi');
-     return '<div class="row-item"><div class="info"><div class="nm">'+PILLS[pid].n+' x'+n+'</div><div class="small muted">'+PILLS[pid].d+'</div></div>'+
-      (n>0&&usable?'<button class="btn jade" onclick="usePill(\''+pid+'\')">服用</button>':'')+'</div>';
-   }).join('')+'</div>'+
-   '<p class="small muted">※ 祭骨丹、回气丹等耗材可在「商行」页采购；多余的丹药、药材也可在商行卖出换灵石。</p>'+
+   '<p class="small muted">位阶越高，炼丹成功率越高（+7%/阶）。新式丹方按「品阶」取药：库存千种灵植皆可入药，从低品阶开始消耗。</p></div>'+
+   '<div class="panel"><h3>丹方库</h3>'+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'+
+    '<select class="fin" onchange="alchTier=+this.value;alchN=40;renderAlchList()">'+tierOpts+'</select>'+
+    '<input class="fin" placeholder="搜丹名…" onchange="alchQ=this.value.trim();alchN=40;renderAlchList()" oninput="if(event.isComposing)return;alchQ=this.value.trim();renderAlchList()">'+
+    '<label class="small"><input type="checkbox" '+(alchOnly?'checked':'')+' onchange="alchOnly=this.checked?1:0;alchN=40;renderAlchList()"> 只看已参悟</label>'+
+   '</div><div id="alchList"></div></div>'+
+   '</div><div>'+
+   '<div class="panel"><h3>丹药仓库</h3><div id="pillStore"></div></div>'+
+   '<p class="small muted">※ 祭骨丹、回气丹等耗材可在「商行」页采购；多余的丹药、药材可在商行卖出换灵石。</p>'+
    '</div></div>';
+  renderAlchList();renderPillStore();
 }
+function renderPillStore(){
+  const USABLE={qpsb:1,cond:1,qi:1,danxp:1,ap:1,perm:1,hp:1,atk:1,def:1};
+  const owned=Object.keys(S.pills).filter(pid=>(S.pills[pid]||0)>0&&PILLS[pid])
+    .sort((a,b)=>((PILLS[b].t||0)-(PILLS[a].t||0)));
+  const box=document.getElementById('pillStore');
+  if(!box)return;
+  if(!owned.length){box.innerHTML='<p class="small muted">囊中无丹。先去采药、种药，再来开炉。</p>';return;}
+  box.innerHTML=owned.map(pid=>{
+    const p=PILLS[pid],n=S.pills[pid];
+    const usable=USABLE[p.f]||pid==='xiusui'||pid==='juling';
+    return '<div class="row-item"><div class="info"><div class="nm">'+p.n+' x'+n+(p.t?'<span class="tag">'+p.t+'品</span>':'')+'</div><div class="small muted">'+p.d+'</div></div>'+
+     (usable?'<button class="btn jade" onclick="usePill(\''+pid+'\')">服用</button>':'')+'</div>';
+  }).join('');
+}
+/* ---------------- 华云商行 ---------------- */
 /* ---------------- 华云商行 ---------------- */
 function renderMarket(){
   const r=curR();
-  const herbs=Object.keys(HERBS).filter(h=>(S.herbs[h]||0)>0);
   const pillsOwned=Object.keys(PILLS).filter(p=>(S.pills[p]||0)>0);
   const shopItems=[
     {k:'lingcao10',n:'灵草 x10',d:'最常见的炼丹辅材',cost:Math.floor(60*Math.pow(1.55,r))},
@@ -1003,6 +1243,14 @@ function renderMarket(){
     {k:'huiqi',n:'回气丹 x1',d:'战斗中恢复六成气血',cost:Math.floor(100*Math.pow(1.55,r))},
     {k:'julingzhui',n:'聚灵坠',d:'修炼速度+35%（'+(S.equips.julingzhui?'已购':'仅此一件')+'）',cost:20000,dis:S.equips.julingzhui},
   ];
+  const tierRows=[1,2,3,4,5,6,7,8,9,10].map(t=>{
+    let n=0;
+    for(const id in S.herbs){const h=HERBS[id];if(h&&h.t===t)n+=S.herbs[id]||0;}
+    if(!n)return '';
+    return '<div class="row-item"><div class="info"><div class="nm">'+t+' 品灵植 x'+n+'</div><div class="small muted">收购价 '+fmt(herbPrice(t))+' 灵石/株 · 共值 '+fmt(herbPrice(t)*n)+'</div></div>'+
+     '<span><button class="btn ghost" onclick="sellHerbsTier('+t+',10)">留10株</button> '+
+     '<button class="btn" onclick="sellHerbsTier('+t+',0)">全售</button></span></div>';
+  }).join('');
   $('main').innerHTML='<div class="grid2"><div>'+
    '<div class="panel"><h3>华云商行 · 采购</h3>'+
    '<p class="small muted">华云商行，货通东荒。掌柜的满面堆笑：“客官里边请——今儿什么都有。”</p>'+
@@ -1010,14 +1258,8 @@ function renderMarket(){
      '<button class="btn" '+(it.dis?'disabled':'')+' onclick="buy(\''+it.k+'\')">'+fmt(it.cost)+' 灵石</button></div>').join('')+
    '</div></div><div>'+
    '<div class="panel"><h3>华云商行 · 出售</h3>'+
-   '<p class="small muted">行商不问来路，收尽天下奇珍。神兵法宝认主，恕不收购。</p>'+
-   (herbs.length?herbs.map(h=>{
-     const p=herbPrice(HERBS[h].t);
-     return '<div class="row-item"><div class="info"><div class="nm">'+HERBS[h].n+' x'+S.herbs[h]+'</div><div class="small muted">收购价 '+fmt(p)+' 灵石/株</div></div>'+
-      '<span><button class="btn ghost" onclick="sellHerb(\''+h+'\',1)">售1</button> '+
-      '<button class="btn ghost" onclick="sellHerb(\''+h+'\',10)">售10</button> '+
-      '<button class="btn" onclick="sellHerb(\''+h+'\','+S.herbs[h]+')">全售</button></span></div>';
-   }).join(''):'<p class="small muted">囊中无药材。</p>')+
+   '<p class="small muted">行商不问来路，收尽天下奇珍——千种灵植按品阶整批收购。神兵法宝认主，恕不收购。</p>'+
+   (tierRows||'<p class="small muted">囊中无药材。</p>')+
    ((S.mats.shouhe||0)>0?'<div class="row-item"><div class="info"><div class="nm">兽核 x'+S.mats.shouhe+'</div><div class="small muted">收购价 '+fmt(corePrice(r))+' 灵石/枚</div></div>'+
      '<span><button class="btn ghost" onclick="sellCore(1)">售1</button> <button class="btn" onclick="sellCore('+S.mats.shouhe+')">全售</button></span></div>':'')+
    (pillsOwned.length?pillsOwned.map(pid=>
@@ -1026,6 +1268,32 @@ function renderMarket(){
    '</div></div></div>';
 }
 /* ---------------- 混沌珠 ---------------- */
+function renderPearlSeeds(){
+  const r=curR();
+  const tMax=Math.min(10,Math.floor(r/2)+1);
+  if(pearlTier>tMax)pearlTier=tMax;
+  const sel=document.getElementById('seedTier');
+  const box=document.getElementById('seedList');
+  if(!box)return;
+  const t=pearlTier;
+  const locked=curR()<seedReqR(t);
+  const arr=HERBS_BY_TIER[t];
+  const opts=arr.map(id=>'<option value="'+id+'">'+HERBS[id].n+(herbAttrsMatch(HERBS[id])?' ★':'')+'</option>').join('');
+  box.innerHTML=(locked?'<p class="small blood">坊市尚未进货 '+t+' 品种子：需 '+REALMS[seedReqR(t)].name+'</p>':'')+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0">'+
+   '<select class="fin" id="seedPick">'+opts+'</select>'+
+   '<button class="btn" '+(locked?'disabled':'')+' onclick="plantHerb(document.getElementById(\'seedPick\').value)">种下（'+fmt(seedCost(t))+' 灵石 + 1 行动点）</button></div>'+
+   '<p class="small muted">'+t+' 品：'+growDays(t)+' 日成熟 · 收 '+harvestYield(t)+' 株 · 商行收购 '+fmt(herbPrice(t))+' 灵石/株。带 ★ 者与你神火同属性，服食加成 1.5 倍。</p>';
+  if(sel)sel.value=t;
+}
+function renderPearlTierSel(){
+  const r=curR();
+  const tMax=Math.min(10,Math.floor(r/2)+1);
+  const sel=document.getElementById('seedTier');
+  if(!sel)return;
+  sel.innerHTML=[1,2,3,4,5,6,7,8,9,10].map(t=>'<option value="'+t+'"'+(t===pearlTier?' selected':'')+'>'+t+' 品种子'+(t>tMax?'（需 '+REALMS[seedReqR(t)].name+'）':'')+'</option>').join('');
+}
+function pearlSetTier(v){pearlTier=+v;renderPearlSeeds();renderPearlTierSel();}
 function renderPearl(){
   if(!S.flags.pearl){
     $('main').innerHTML='<div class="panel" style="text-align:center;padding:50px 20px">'+
@@ -1039,12 +1307,7 @@ function renderPearl(){
      '<div class="small muted">'+(left>0?('还需 '+left+' 日成熟'):'<span class="jade">已成熟，待收获</span>')+'</div></div>'+
      (left>0?'<span class="small muted">第'+p.d+'日种</span>':'<button class="btn jade" onclick="harvestPlant('+i+')">收获 +'+harvestYield(t)+'</button>')+'</div>';
   }).join('');
-  const seeds=Object.keys(SEEDS).filter(h=>curR()>=SEEDS[h].reqR).map(h=>{
-    const t=HERBS[h].t;
-    return '<div class="row-item"><div class="info"><div class="nm">种植 '+HERBS[h].n+'</div>'+
-     '<div class="small muted">种子费 '+fmt(seedCost(t))+' 灵石 · '+growDays(t)+' 日成熟 · 收 '+harvestYield(t)+' 株（1 行动点）</div></div>'+
-     '<button class="btn" onclick="plantHerb(\''+h+'\')">种下</button></div>';
-  }).join('');
+  const tierSel='<select class="fin" id="seedTier" onchange="pearlSetTier(this.value)"></select>';
   const trees=S.pearl.trees.map((t,i)=>{
     if(t.dead)return '<div class="row-item"><div class="info"><div class="nm blood">🥀 枯萎的神树</div>'+
      '<div class="small muted">不再荫庇修行；复苏需 '+fmt(reviveCost(r))+' 灵石</div></div>'+
@@ -1061,12 +1324,13 @@ function renderPearl(){
   }).join('');
   $('main').innerHTML='<div class="grid2"><div>'+
    '<div class="panel"><h3>混沌珠 · 混沌小世界</h3>'+
-   '<p class="small">混沌前辈所赠至宝，内藏一方小世界，<b class="gold">空间无边无际</b>：丹药材料随你种，神树灵兽随你养。</p>'+
+   '<p class="small">混沌前辈所赠至宝，内藏一方小世界，<b class="gold">空间无边无际</b>：千种灵植随你种，神树灵兽随你养。</p>'+
    '<hr class="hr"><div class="small">现状：灵植 '+S.pearl.plants.length+' 株 ｜ 神树 '+livingTrees()+'/'+S.pearl.trees.length+' 株存活 ｜ 灵兽 '+S.pearl.beasts.length+' 只</div>'+
    '<div class="small muted">每日状态回复：+'+condRecoveryPerDay()+'（神树尽枯时仅 +'+COND_SLOW+'，回复缓慢）</div></div>'+
-   '<div class="panel"><h3>灵植园（丹药材料）</h3>'+
-   seeds+
-   (S.pearl.plants.length?('<hr class="hr">'+growing):'<p class="small muted">园中空空——先种下些灵草吧（采药可赚种子费）。</p>')+
+   '<div class="panel"><h3>灵植园（千种灵植）</h3>'+
+   '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">种子品阶：'+tierSel+'</div>'+
+   '<div id="seedList"></div>'+
+   (S.pearl.plants.length?('<hr class="hr">'+growing):'<p class="small muted">园中空空——种下第一株吧。</p>')+
    '</div></div><div>'+
    '<div class="panel"><h3>混沌神树（回复状态）</h3>'+
    '<p class="small muted">每株存活神树：每日状态回复 +'+COND_PER_TREE+'；树下吐纳（1 行动点）可额外回复。神树每日茂盛度 -'+TREE_DAILY_DECAY+'，记得浇灌——枯萎则无荫可纳。</p>'+
@@ -1085,10 +1349,12 @@ function renderPearl(){
    }).join('')+
    (beasts?('<hr class="hr">'+beasts):'<p class="small muted">栏中空空。</p>')+
    '</div></div></div>';
+  renderPearlTierSel();renderPearlSeeds();
 }
 function renderBag(){
-  const herbs=Object.keys(HERBS).filter(h=>(S.herbs[h]||0)>0);
   const eqs=Object.keys(EQ).filter(e=>S.equips[e]);
+  const tierOpts=[0,1,2,3,4,5,6,7,8,9,10].map(t=>'<option value="'+t+'"'+(bagTier===t?' selected':'')+'>'+(t?('限 '+t+' 品'):'不限品阶')+'</option>').join('');
+  const attrOpts=[-1,0,1,2,3,4,5,6,7,8,9].map(a=>'<option value="'+a+'"'+(bagAttr===a?' selected':'')+'>'+((a<0)?'不限属性':HERB_ATTRS[a]+'系')+'</option>').join('');
   $('main').innerHTML='<div class="grid2"><div>'+
    '<div class="panel"><h3>装备</h3>'+
    (eqs.length?eqs.map(eid=>{
@@ -1099,13 +1365,38 @@ function renderBag(){
       (on?'<span class="jade small">穿戴中</span>':'<button class="btn" onclick="equipItem(\''+eid+'\')">穿戴</button>')+'</div>';
    }).join(''):'<p class="small muted">身无长物——去历练寻宝吧。</p>')+
    '<hr class="hr"><div class="small muted">已穿戴：'+
-     (['weapon','armor','treasure','acc'].map(s=>S.wearing[s]?EQ[S.wearing[s]].n:'——').join(' ｜ '))+'</div></div>'+
+     (['weapon','armor','treasure','acc'].map(s=>S.wearing[s]?EQ[S.wearing[s]].n:'——').join(' ｜ '))+'</div>'+
+   '<hr class="hr"><div class="small">兽核 x'+(S.mats.shouhe||0)+'<span class="muted">（炼丹材料）</span></div></div>'+
    '</div><div>'+
-   '<div class="panel"><h3>药材</h3>'+
-   (herbs.length?herbs.map(h=>'<div class="row-item"><div class="info"><div class="nm">'+HERBS[h].n+' x'+S.herbs[h]+'</div>'+
-     '<button class="btn ghost" onclick="sellHerb(\''+h+'\',10)">售10</button></div></div>').join(''):'<p class="small muted">空空如也。</p>')+
-   '<hr class="hr"><div class="small">兽核 x'+(S.mats.shouhe||0)+'<span class="muted">（炼丹材料）</span></div>'+
-   '</div></div></div>';
+   '<div class="panel"><h3>药材库（千种灵植）</h3>'+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'+
+    '<select class="fin" onchange="bagTier=+this.value;bagN=60;renderBagList()">'+tierOpts+'</select>'+
+    '<select class="fin" onchange="bagAttr=+this.value;bagN=60;renderBagList()">'+attrOpts+'</select>'+
+    '<input class="fin" placeholder="搜药材名…" onchange="bagQ=this.value.trim();bagN=60;renderBagList()">'+
+   '</div><div id="bagList"></div></div>'+
+   '</div></div>';
+  renderBagList();
+}
+function renderBagList(){
+  let ids=Object.keys(S.herbs).filter(id=>(S.herbs[id]||0)>0&&HERBS[id]);
+  if(bagTier)ids=ids.filter(id=>HERBS[id].t===bagTier);
+  if(bagAttr>=0)ids=ids.filter(id=>HERBS[id].a===bagAttr);
+  if(bagQ)ids=ids.filter(id=>HERBS[id].n.indexOf(bagQ)>=0);
+  ids.sort((a,b)=>HERBS[a].t-HERBS[b].t||HERBS[a].n.localeCompare(HERBS[b].n,'zh'));
+  const total=ids.length;
+  ids=ids.slice(0,bagN);
+  const box=document.getElementById('bagList');
+  if(!box)return;
+  box.innerHTML='<p class="small muted">共 '+total+' 种持有</p>'+
+   (ids.map(id=>{
+     const h=HERBS[id];
+     const star=herbAttrsMatch(h)?' ★':'';
+     return '<div class="row-item"><div class="info"><div class="nm">'+h.n+star+' x'+S.herbs[id]+'<span class="tag">'+h.t+'品</span><span class="tag">'+HERB_ATTRS[h.a]+'系</span></div>'+
+      '<div class="small muted">服食得灵气与状态；商行收购 '+fmt(herbPrice(h.t))+' 灵石/株</div></div>'+
+      '<span><button class="btn jade" onclick="eatHerb(\''+id+'\')">服食(1行动)</button> '+
+      '<button class="btn ghost" onclick="sellHerb(\''+id+'\',10)">售10</button></span></div>';
+   }).join('')||'<p class="small muted">囊中空空。</p>')+
+   (total>bagN?'<div style="text-align:center;margin:8px"><button class="btn ghost" onclick="bagN+=60;renderBagList()">显示更多</button></div>':'');
 }
 function renderStars(){
   $('main').innerHTML='<div class="grid2"><div class="panel" style="text-align:center">'+

@@ -192,3 +192,39 @@ button.btn,.rune,#tabs button{touch-action:manipulation;-webkit-tap-highlight-co
   .enemy .btn{min-width:76px}
   .zone{padding:8px 10px}
 }
+
+/* ---------- 大千世界：筛选控件 / 折叠地图组 ---------- */
+.fin{
+  background:rgba(0,0,0,.35);
+  color:var(--ink);
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:8px;
+  padding:7px 9px;
+  font-size:13px;
+  font-family:inherit;
+  outline:none;
+}
+.fin:focus{border-color:var(--gold)}
+select.fin{cursor:pointer}
+select.fin option{background:#0d1226;color:var(--ink)}
+input.fin{min-width:120px}
+details.zgrp{
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:10px;
+  margin:8px 0;
+  background:rgba(255,255,255,.03);
+}
+details.zgrp summary{
+  cursor:pointer;
+  padding:9px 12px;
+  font-size:13.5px;
+  color:var(--gold);
+  letter-spacing:1px;
+  user-select:none;
+  list-style:none;
+}
+details.zgrp summary::-webkit-details-marker{display:none}
+details.zgrp summary::after{content:' ▾';opacity:.7}
+details.zgrp[open] summary::after{content:' ▴'}
+details.zgrp summary:hover{background:rgba(255,255,255,.05)}
+details.zgrp > *:not(summary){margin:0 10px 10px}
