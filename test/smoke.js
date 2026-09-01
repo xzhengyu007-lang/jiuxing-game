@@ -1,0 +1,205 @@
+/* 无头冒烟测试：node test/smoke.js */
+const fs=require('fs');
+const path=require('path');
+const el=()=>({innerHTML:'',textContent:'',value:'',scrollTop:0,scrollHeight:0,style:{},classList:{add(){},remove(){},toggle(){}},appendChild(){},remove(){},select(){}});
+const sandbox={
+  console,Math,JSON,Date,isFinite,isNaN,parseInt,parseFloat,String,Number,Array,Object,
+  setInterval:()=>0,clearInterval:()=>{},setTimeout:()=>0,
+  document:{getElementById:()=>el(),querySelector:()=>null,createElement:()=>({remove(){}}),addEventListener(){}},
+  localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+  location:{reload(){}},window:{addEventListener(){}},
+  innerWidth:1200,innerHeight:800,requestAnimationFrame:()=>0,
+  btoa:s=>Buffer.from(s,'binary').toString('base64'),atob:s=>Buffer.from(s,'base64').toString('binary'),
+  unescape,escape,confirm:()=>false,alert(){}
+};
+for(const k in sandbox)globalThis[k]=sandbox[k];
+const data=fs.readFileSync(path.join(__dirname,'..','js','data.js'),'utf8');
+const game=fs.readFileSync(path.join(__dirname,'..','js','game.js'),'utf8');
+const test=`
+function assert(c,msg){ if(!c) throw new Error('断言失败: '+msg); }
+
+/* ========== 阶段一：全境界流程 ========== */
+S=newState();
+S.ap=999999;
+assert(REALMS.length===22,'应有22个大境界');
+assert(MAXG()===285,'总层数应为285');
+const realRandom=Math.random;
+Math.random=()=>0.01;
+let guard=0;
+while(S.g<MAXG() && guard++<100000){
+  const r=curR(), l=curL();
+  if(r===3 && S.bones<BONES_REQ[l]){ S.pills.jigu=1; refineBone(); continue; }
+  if(l===12){
+    if(r+1===8) S.pills.xuandan=1;
+    if(r+1===11) S.pills.shengsi=1;
+    if(r+1===14) S.pills.shenhuo=1;
+  }
+  const b=S.g;
+  S.qi=layerCost()*10;
+  tryBreak();
+  if(S.g===b){
+    if(P&&P.type==='fire'){ S.pills.shenhuo=1; chooseFireSeed('雷'); continue; }
+    if(P&&P.type==='sijie'){ resolveSijie([0,1,2,3]); continue; }
+    throw new Error('tryBreak 未推进: g='+S.g+' r='+r+' l='+l);
+  }
+}
+assert(S.g===MAXG(),'应修至285层, 实际 '+S.g);
+assert(S.flags.fireSeed,'神火之种应已点燃');
+assert(S.flags.sijie>0,'四极择符应已完成');
+assert(S.bones>=31,'锻骨应祭炼31根以上, 实际 '+S.bones);
+assert(S.flags.mingxing,'命星境应已触发');
+assert(S.flags.pearl===1,'凝血境后混沌珠应已获得');
+Math.random=realRandom;
+
+/* —— 全区域战斗 —— */
+S.flags.sect=1;S.ap=999999;
+for(const z of ZONES){
+  if(z.sect)S.flags.sect=1;
+  assert(zoneUnlocked(z),'区域应解锁: '+z.name);
+  for(let i=0;i<z.enemies.length;i++){
+    startBattle(z.id,i);
+    assert(B!==null,'战斗应已开始: '+z.id+' #'+i);
+    let n=0;
+    while(B&&!B.over&&n++<500)useSkill('bati');
+    assert(B.over===true,'战斗应结束: '+z.id+' #'+i);
+    assert((S.kills[z.id+':'+i]||0)>0,'击杀应被记录: '+z.id+' #'+i);
+    B=null;
+  }
+}
+assert((S.kills['xingkong:2']||0)>0,'终局首领应被击杀');
+assert(S.flags.won===1,'应达成通关标记');
+
+/* —— 炼丹 / 开星 —— */
+S.herbs.lingcao=100;S.herbs.xuecao=100;S.herbs.ziling=100;S.mats.shouhe=100;S.danExp=300;
+Math.random=()=>0.01;
+const exp0=S.danExp;
+for(let i=0;i<30;i++)craft('huiqi');
+assert(S.danExp>exp0,'炼丹应获得阅历');
+assert((S.pills.huiqi||0)>0,'应有丹药产出');
+S.stones=1e9;S.qi=1e60;
+for(let i=0;i<9;i++)openStar(i);
+assert(starCnt()===9,'九星应全部开启, 实际 '+starCnt());
+Math.random=realRandom;
+
+/* —— 采药 —— */
+S.expCd={};S.ap=999;
+const h0=S.herbs.lingcao||0;
+explore('fengming');
+assert((S.herbs.lingcao||0)>h0,'采药应获得灵草');
+
+/* ========== 阶段二：日程 / 混沌珠 / 华云商行 ========== */
+S=newState();
+S.stones=1e12;
+S.flags.pearl=1;S.flags.sect=1;
+
+/* —— 日程 —— */
+assert(S.day===1,'初始第1日');
+assert(S.ap===apMax(0),'初始行动点应为22');
+const ap0=S.ap;
+explore('fengming');
+assert(S.ap===ap0-1,'采药应消耗1行动点');
+S.expCd={};
+startBattle('fengming',0);
+assert(S.ap===ap0-3,'出战应消耗2行动点');
+B=null;
+S.expCd={};
+const apNow=S.ap;
+craft('huiqi');
+assert(S.ap===apNow,'材料不足时不应扣行动点');
+S.herbs.lingcao=100;S.danExp=300;
+craft('huiqi');
+assert(S.ap===apNow-1,'炼丹应消耗1行动点');
+
+/* —— 状态与行动点恢复 —— */
+S.cond=40;nextDay();
+assert(S.day===2,'应进入第2日');
+assert(S.ap===apMax(curR()),'行动点应回满');
+assert(S.cond===48,'无树时状态应+8, 实际 '+S.cond);
+
+/* —— 混沌珠：灵植 —— */
+const hbase=S.herbs.lingcao||0;
+plantHerb('lingcao');
+assert(S.pearl.plants.length===1,'种植后应有1株灵植');
+nextDay();
+harvestPlant(0);
+assert((S.herbs.lingcao||0)===hbase+3,'灵草1日熟收3株, 实际 '+(S.herbs.lingcao-hbase));
+
+/* —— 混沌神树 —— */
+S.pearl.trees=[];
+plantTree();plantTree();
+assert(livingTrees()===2,'植树后应2株存活');
+S.pearl.trees[0].vigor=30;
+waterTrees();
+assert(S.pearl.trees[0].vigor===55,'浇灌应+25茂盛');
+S.pearl.trees[1].vigor=24;
+nextDay();
+assert(S.pearl.trees[1].dead===1,'茂盛耗尽应枯萎');
+assert(livingTrees()===1,'枯萎后应剩1株存活');
+const c0=S.cond;
+nextDay();
+assert(S.cond>c0,'有树时过夜应回复状态');
+S.pearl.trees.forEach(t=>{t.dead=1;});
+const c1=S.cond;
+nextDay();
+assert(S.cond===Math.min(100,c1+8),'神树尽枯时每日仅+8（缓慢回复）, 实际 '+(S.cond-c1));
+breatheTrees();
+assert(S.cond===Math.min(100,c1+8),'无活树时吐纳应无效');
+S.stones=1e12;
+reviveTree(0);
+assert(S.pearl.trees[0].dead===0,'复苏应救回枯树');
+
+/* —— 灵兽产出 —— */
+S.pearl.beasts=[{t:'langbei'},{t:'niubei'},{t:'fengqun'}];
+const s0=S.stones,l0=S.herbs.lingcao||0,core0=S.mats.shouhe||0;
+nextDay();
+assert(S.stones>s0,'灵牛崽应产灵石');
+assert((S.herbs.lingcao||0)>l0,'玉蜂群应产灵草');
+assert(S.mats.shouhe>core0,'灵狼崽应产兽核');
+
+/* —— 华云商行 —— */
+S.herbs.lingcao=50;S.mats.shouhe=20;S.pills.huiqi=5;
+const s1=S.stones;
+sellHerb('lingcao',10);
+assert(S.stones>s1,'售药材应得灵石');
+const s2=S.stones;
+sellCore(5);
+assert(S.stones>s2,'售兽核应得灵石');
+const s3=S.stones;
+sellPill('huiqi',2);
+assert(S.stones>s3,'售丹药应得灵石');
+buy('jigu');
+assert((S.pills.jigu||0)>0,'商行应可购买祭骨丹');
+buyBeast('fengqun');
+assert(S.pearl.beasts.length===4,'应可购买灵兽');
+
+/* —— 状态联动 —— */
+S.cond=100;
+const q100=qps(),a100=heroStats().atk;
+S.cond=20;
+const q20=qps(),a20=heroStats().atk;
+assert(q20<q100&&a20<a100,'低状态应削弱修炼与战斗');
+
+/* —— 渲染冒烟（珠内 / 商行等页面） —— */
+curTab='pearl';renderAll();
+curTab='market';renderAll();
+curTab='bag';renderAll();
+curTab='realms';renderAll();
+curTab='cult';renderAll();
+
+/* —— 存档往返（v1 旧档升级 v2） —— */
+save();
+S.v=1;const dump=JSON.stringify(S);
+localStorage.getItem=k=>dump;
+S=load();
+assert(S&&S.v===2,'旧档应升级为 v2, 实际 '+(S&&S.v));
+assert(S.pearl&&typeof S.pearl.trees==='object','旧档迁移应有混沌珠默认结构');
+assert(S.day>=1,'旧档迁移应保留天数');
+
+console.log('✅ 冒烟测试全部通过：22境×13层全流程 / 战斗 / 炼丹 / 九星 / 采药 / 日程 / 混沌珠 / 华云商行 / 存档迁移');
+`;
+eval(sandboxWrap());
+function sandboxWrap(){
+  for(const k in sandbox)globalThis[k]=sandbox[k];
+  fs.writeFileSync(path.join(__dirname,'combined.js'),data+'\n'+game+'\n'+test);
+  require('./combined.js');
+}
