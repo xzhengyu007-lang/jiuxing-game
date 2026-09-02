@@ -168,21 +168,18 @@ const STARS=[
 ];
 
 /* ---------- 凝星丹：九星各有专属丹药，六等品阶（普通/上品/特品/完美/神丹/巨丹） ---------- */
-const STAR_PILL_Q=[
- {s:'普通',m:1},{s:'上品',m:2},{s:'特品',m:3.5},{s:'完美',m:6},{s:'神丹',m:10},{s:'巨丹',m:18}
+const STAR_PILL_Q=[ /* p=成星进度（重） */
+ {s:'普通',m:1,p:1},{s:'上品',m:2,p:2},{s:'特品',m:3.5,p:3},{s:'完美',m:6,p:4},{s:'神丹',m:10,p:5},{s:'巨丹',m:18,p:6}
 ];
 /* 凝星十三重（九星共此进阶之路，每星各自凝炼） */
 const STAR_STAGES=['星尘初聚','微芒始现','星火一点','星核初成','星环初绕','星纹天成','星魄内凝','星辉灌体','星海映身','星冕加顶','星劫淬真','星光通明','星汉圆满'];
-/* 凝至第 k+1 重所需星丹品阶（0普通 1上品 2特品 3完美 4神丹 5巨丹） */
-const STAR_STAGE_Q=[0,0,1,1,1,2,2,2,3,3,4,4,5];
 (function(){
   for(let i=0;i<STARS.length;i++){
     const st=STARS[i];
     for(let q=0;q<STAR_PILL_Q.length;q++){
-      const Q=STAR_PILL_Q[q],need=[];
-      for(let k=0;k<STAR_STAGE_Q.length;k++)if(STAR_STAGE_Q[k]===q)need.push(CN_NUM[k+1]);
+      const Q=STAR_PILL_Q[q];
       PILLS['star'+i+'_'+q]={n:(q?Q.s+'·':'')+st.name+'丹',f:'star',t:Math.min(10,st.reqR+1),m:Q.m,
-        d:'凝星之丹（'+Q.s+'）：凝聚或进阶【'+st.name+'】（'+st.alias+'）——第'+need.join('、')+'重需此品阶，更高品阶可代用。请于九星页使用，不可直接服用。'};
+        d:'凝星之丹（'+Q.s+'）：为【'+st.name+'】（'+st.alias+'）凝星提供 +'+Q.p+' 重成星进度，品阶越高进度越多。请于九星页使用，不可直接服用。'};
     }
   }
 })();

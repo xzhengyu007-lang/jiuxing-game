@@ -866,10 +866,6 @@ function doEvent(z){
 
 /* ---------------- 九星秘藏：凝星丹与凝星十三重 ---------------- */
 function starPillId(i,q){return 'star'+i+'_'+q;}
-function findStarPill(i,q){ // 自所需品阶向上寻囊中星丹（高品可代低品）
-  for(let k=q;k<STAR_PILL_Q.length;k++)if((S.pills[starPillId(i,k)]||0)>0)return k;
-  return -1;
-}
 function rollStarQ(rank){ // 凝星丹品阶随机：丹道越高、紫阙星/丹心诀加持，越易出高品
   const b=starFx('craft')+gfFx('craft');
   const r=Math.random();
@@ -887,39 +883,40 @@ function starFxTxt(st,lv){
   if(st.fx==='all')return L+' +'+Math.round(v*100)+'%、修炼速度 +'+Math.round(v*50)+'%';
   return L+' +'+Math.round(v*100)+'%';
 }
-function condenseStar(i){
+function condenseStar(i,q){ // 以星丹凝星：品阶越高，成星进度越多
+  q|=0;
   if(!S)return;
   const st=STARS[i]; if(!st)return;
   const lv=starLvOf(i);
   if(lv>=13){toast(st.name+'已凝至「星汉圆满」，大圆满之境');return;}
   if(lv===0&&i!==starCnt()){toast('需依序凝聚九星秘藏');return;}
   if(curR()<st.reqR){toast('境界不足：需 '+REALMS[st.reqR].name);return;}
-  const nq=STAR_STAGE_Q[lv];
-  const pq=findStarPill(i,nq);
-  const pillN=(nq?STAR_PILL_Q[nq].s+'·':'')+st.name+'丹';
-  if(pq<0){toast('凝星需一枚【'+pillN+'】——炼丹页以「'+st.name+'丹」丹方炼制（品阶随机，高品可代）');return;}
-  const prog=(lv+1)/STAR_STAGES.length;
-  const qiCost=Math.floor(layerCost()*st.qiMul*(lv?0.35*prog:1));
-  const stCost=Math.floor(st.stones*(lv?0.25*prog:1));
+  const Q=STAR_PILL_Q[q];
+  if(!Q)return;
+  if((S.pills[starPillId(i,q)]||0)<1){toast('囊中无【'+(q?Q.s+'·':'')+st.name+'丹】——炼丹页可炼制，品阶随机');return;}
+  const full=STAR_STAGES.length,prog=Math.min(Q.p,full-lv);
+  const qiCost=Math.floor(layerCost()*st.qiMul*(lv+prog)/full);
+  const stCost=Math.floor(st.stones*(lv+prog)/full);
   if(S.qi<qiCost){toast('灵气不足：需 '+fmt(qiCost));return;}
   if(S.stones<stCost){toast('灵石不足：需 '+fmt(stCost));return;}
   S.qi-=qiCost;S.stones-=stCost;
-  S.pills[starPillId(i,pq)]--;
-  S.starLv[i]=lv+1;
-  if(lv===0){
+  S.pills[starPillId(i,q)]--;
+  const was0=lv===0;
+  S.starLv[i]=lv+prog;
+  if(was0){
     S.starsOpened.push(st.name);
-    log('story','星丹入体，轰！！体内第'+CN_NUM[i+1]+'重禁制应声而开——【'+st.name+'】（'+st.alias+'）秘藏凝聚成功，凝星一重「'+STAR_STAGES[0]+'」成！九星之数又添其一。');
+    log('story','星丹入体，轰！！体内第'+CN_NUM[i+1]+'重禁制应声而开——【'+st.name+'】（'+st.alias+'）秘藏凝聚成功，成星进度 +'+prog+' 重，已凝至第 '+cnL(S.starLv[i]-1)+' 重「'+STAR_STAGES[S.starLv[i]-1]+'」！九星之数又添其一。');
     toast('凝聚九星秘藏【'+st.name+'】！','good');
     if(starCnt()>=9){
       log('story','九星连珠，霸体觉醒！九大秘藏一气贯通，你已是真正意义上的——九星霸体！');
       toast('九星归位 · 霸体觉醒！','good');
     }
   }else{
-    log('good','【'+st.name+'】凝星第 '+cnL(lv)+' 重「'+STAR_STAGES[lv]+'」成！神通愈盛：'+starFxTxt(st,lv+1));
-    if(lv+1>=13){
-      log('story','星汉圆满！【'+st.name+'】十三重凝星功成，星辉如瀑灌体——此星神通已然翻倍。');
-      toast('凝星大圆满：'+st.name,'good');
-    }
+    log('good','【'+(q?Q.s+'·':'')+st.name+'丹】化入星窍：成星进度 +'+prog+' 重——【'+st.name+'】已凝至第 '+cnL(S.starLv[i]-1)+' 重「'+STAR_STAGES[S.starLv[i]-1]+'」（'+starFxTxt(st,S.starLv[i])+'）。');
+  }
+  if(S.starLv[i]>=13){
+    log('story','星汉圆满！【'+st.name+'】十三重凝星功成，星辉如瀑灌体——此星神通已然翻倍。');
+    toast('凝星大圆满：'+st.name,'good');
   }
   renderAll();save();
 }
@@ -1703,37 +1700,33 @@ function renderBagList(){
    (total>bagN?'<div style="text-align:center;margin:8px"><button class="btn ghost" onclick="bagN+=60;renderBagList()">显示更多</button></div>':'');
 }
 function renderStars(){
-  const stageRows=STAR_STAGES.map((nm,k)=>{
-    const q=STAR_STAGE_Q[k],Q=STAR_PILL_Q[q];
-    return '<div class="row-item"><div class="info"><div class="nm">第 '+cnL(k)+' 重 · '+nm+'</div>'+
-     '<div class="small muted">凝星所需：'+(q?Q.s+'·':'')+'【星丹】（品阶随重递升）</div></div></div>';
-  }).join('');
+  const chips=STAR_STAGES.map((nm,k)=>'<span class="tag">'+cnL(k)+'重·'+nm+'</span>').join(' ');
   const rows=STARS.map((st,i)=>{
     const lv=starLvOf(i),full=lv>=13,opened=lv>0,isNext=i===starCnt();
-    const nq=full?0:STAR_STAGE_Q[lv];
-    const pillN=(nq?STAR_PILL_Q[nq].s+'·':'')+st.name+'丹';
-    const pq=full?-1:findStarPill(i,nq);
-    const qiCost=full?0:Math.floor(layerCost()*st.qiMul*(lv?0.35*(lv+1)/STAR_STAGES.length:1));
-    const stCost=full?0:Math.floor(st.stones*(lv?0.25*(lv+1)/STAR_STAGES.length:1));
+    const fn=STAR_STAGES.length;
+    const qiPer=Math.floor(layerCost()*st.qiMul*Math.min(lv+1,fn)/fn);
+    const stPer=Math.floor(st.stones*Math.min(lv+1,fn)/fn);
     const realmOk=curR()>=st.reqR,orderOk=lv>0||isNext;
-    const can=!full&&realmOk&&orderOk&&pq>=0&&S.qi>=qiCost&&S.stones>=stCost;
-    const pillTag=pq>=0?'<span class="tag">囊中 x'+(S.pills[starPillId(i,pq)]||0)+'</span>':'<span class="tag no">缺丹</span>';
+    const canBase=!full&&realmOk&&orderOk;
+    const btns=full?'':STAR_PILL_Q.map((Q,q)=>{
+      const have=S.pills[starPillId(i,q)]||0;
+      const ok=canBase&&have>0&&S.qi>=qiPer&&S.stones>=stPer;
+      return '<button class="btn'+(ok?'':' ghost')+'" '+(ok?'':'disabled')+' onclick="condenseStar('+i+','+q+')">'+(q?Q.s:'普通')+' +'+Q.p+'重 x'+have+'</button>';
+    }).join(' ');
     return '<div class="row-item"><div class="info"><div class="nm">'+st.name+' · '+st.alias+
-     (full?'<span class="tag rank">大圆满</span>':(opened?'<span class="tag rank">第 '+cnL(lv)+' 重·'+STAR_STAGES[lv]+'</span>':(isNext?'<span class="tag">下一星</span>':'<span class="tag no">待前置</span>')))+
+     (full?'<span class="tag rank">大圆满</span>':(opened?'<span class="tag rank">第 '+cnL(lv-1)+' 重·'+STAR_STAGES[lv-1]+'</span>':(isNext?'<span class="tag">下一星</span>':'<span class="tag no">待前置</span>')))+
      '</div>'+
      '<div class="small muted">'+(st.d||'')+'</div>'+
-     (opened?'<div class="small">神通当前：<b class="gold">'+starFxTxt(st,lv)+'</b>'+(full?'':'（圆满可翻倍）')+'</div>':'')+
+     (opened?'<div class="small">神通当前：<b class="gold">'+starFxTxt(st,lv)+'</b>'+(full?'':'（大圆满可翻倍）')+'</div>':'')+
      (full?'<div class="small muted">十三重凝星功成，星汉长明。</div>':
-       '<div class="small muted">凝星所需：【'+pillN+'】'+pillTag+' ｜ 灵气 '+fmt(qiCost)+' ｜ 灵石 '+fmt(stCost)+'</div>'+condstarHint(st,realmOk))+
-     '</div>'+
-     (full?'<span class="jade small">✦</span>':
-       ((realmOk&&orderOk)?'<button class="btn" '+(can?'':'disabled')+' onclick="condenseStar('+i+')">'+(opened?'凝星进阶':'凝聚星窍')+'</button>':'<span class="small muted">待前置</span>'))+
-     '</div>';
+       '<div class="small muted">每凝一重：灵气 '+fmt(qiPer)+' ｜ 灵石 '+fmt(stPer)+'（随重数渐增）'+(!realmOk?' ｜ 需 '+REALMS[st.reqR].name:'')+'</div>'+condstarHint(st,realmOk)+
+       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">'+btns+'</div>')+
+     '</div></div>';
   }).join('');
   $('main').innerHTML='<div class="grid2"><div class="panel" style="text-align:center">'+
    '<h3>九星秘藏 · 凝星</h3>'+starWheelSvg()+
-   '<p class="small muted">九星皆需以专属「星丹」凝聚：炼丹页参悟九张凝星丹方，丹成品阶随机<br>（普通/上品/特品/完美/神丹/巨丹）——丹道越高，紫阙星与丹心诀加持，越易出高品。</p>'+
-   '<hr class="hr"><h3 class="small">凝星十三重</h3>'+stageRows+'</div>'+
+   '<p class="small muted">九星皆需以专属「星丹」凝聚：炼丹页参悟九张凝星丹方，丹成品阶随机。<br>品阶越高，成星进度越多：普通 +1 · 上品 +2 · 特品 +3 · 完美 +4 · 神丹 +5 · 巨丹 +6 重。<br>丹道越高，紫阙星与丹心诀加持，越易出高品。</p>'+
+   '<hr class="hr"><h3 class="small">凝星十三重</h3><div style="line-height:2">'+chips+'</div></div>'+
    '<div class="panel"><h3>凝星之路</h3>'+rows+
    '<hr class="hr"><p class="small">每星凝至十三重「星汉圆满」，该星神通翻倍。九星归位：霸体觉醒。</p>'+
    '</div></div>';

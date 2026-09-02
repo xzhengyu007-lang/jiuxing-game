@@ -384,7 +384,7 @@ assert(qiCap()>0,'次日上限应恢复可用');
 /* ========== 阶段五：凝星丹与凝星十三重 ========== */
 assert(Object.keys(PILLS).filter(k=>PILLS[k].f==='star').length===54,'凝星丹应有54枚');
 assert(STAR_STAGES.length===13,'凝星应十三重');
-assert(STAR_STAGE_Q.length===13,'品阶需求表应13项');
+for(let q=0;q<STAR_PILL_Q.length;q++)assert(STAR_PILL_Q[q].p===q+1,'品阶进度应递增: '+q);
 assert(RECIPES.length===618,'丹方应618张, 实际 '+RECIPES.length);
 S=newState();
 S.g=LAYER_CNT; // 凝血一层，风府星可凝
@@ -392,25 +392,22 @@ S.stones=1e12;S.qi=1e60;S.ap=999;S.danExp=1e9;
 S.herbs[HERBS_BY_TIER[1][0]]=99;S.herbs[HERBS_BY_TIER[2][0]]=99;S.mats.shouhe=99;
 const rrr=Math.random;Math.random=()=>0.001; // 必成丹且必出巨丹
 craft('r_star0');
-assert((S.pills.star0_5||0)===1,'固定随机应出巨丹品阶');
+assert((S.pills.star0_5||0)===1,'固定随机应出巨丹');
 usePill('star0_5');
 assert((S.pills.star0_5||0)===1,'凝星丹不可直接服用');
-condenseStar(0);
-assert(S.starLv[0]===1&&starCnt()===1,'凝聚第一星应成功（高品代用）');
+condenseStar(0,5);
+assert(S.starLv[0]===6&&starCnt()===1,'巨丹应+6重, 实际 '+S.starLv[0]);
 assert((S.pills.star0_5||0)===0,'凝星应消耗星丹');
-const fx1=starFx('qps');
-assert(Math.abs(fx1-0.25)<1e-9,'一重神通应为基础值');
-condenseStar(1);
+condenseStar(1,0);
 assert(!S.starLv[1],'未依序凝聚应被拒');
-for(let s=2;s<=13;s++){
-  const q=STAR_STAGE_Q[s-1];
-  S.pills['star0_'+q]=(S.pills['star0_'+q]||0)+1;
-  condenseStar(0);
-  assert(S.starLv[0]===s,'凝星应至第'+s+'重, 实际 '+S.starLv[0]);
-}
+S.pills.star0_5=2;S.pills.star0_0=1;
+condenseStar(0,5);
+assert(S.starLv[0]===12,'应凝至12重, 实际 '+S.starLv[0]);
+condenseStar(0,0);
+assert(S.starLv[0]===13,'应凝至13重, 实际 '+S.starLv[0]);
 assert(Math.abs(starFx('qps')-0.5)<1e-9,'十三重神通应翻倍');
-S.g=11*LAYER_CNT; // 提至镇道星所需境界
-for(let i=1;i<9;i++){S.pills['star'+i+'_0']=1;condenseStar(i);}
+S.g=11*LAYER_CNT;
+for(let i=1;i<9;i++){S.pills['star'+i+'_0']=1;condenseStar(i,0);}
 assert(starCnt()===9,'九星应全部凝聚');
 checkAch();
 assert(S.ach.a_st13===1,'星汉圆满成就应达成');
@@ -419,7 +416,7 @@ Math.random=rrr;
 curTab='stars';renderAll();
 curTab='alchemy';renderAll();
 curTab='codex';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹·十三重 / 九星塔·功法 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹·成星进度 / 九星塔·功法 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
