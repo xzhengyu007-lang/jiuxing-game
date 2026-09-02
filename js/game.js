@@ -38,9 +38,14 @@ function newState(){
     flags:{intro:0,gumu:0,siguo:0,sect:0,pearl:0,fireSeed:null,sijie:0,mingxing:0,won:0},
     buffs:{julingUntil:0,qps:null},
     autobreak:0, usePojing:1, speed:1,
-    day:1, ap:apMax(0), cond:100,
+    day:1, ap:22, cond:100,
     pearl:{plants:[],trees:[],beasts:[]},
     expCd:{}, logs:[], lastTick:Date.now(),
+    qiToday:0,
+    daily:{day:0,qs:[],prog:[],done:[]},
+    ach:{}, stat:{kills:0,bosses:0,crafts:0,explores:0,eats:0,sells:0,towers:0,qiTotal:0},
+    seen:{h:{},p:{}},
+    towerBest:0, gf:{own:{},on:null}, eqLv:0,
   };
 }
 function save(){ if(!S)return; S.lastTick=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
@@ -73,6 +78,7 @@ function buffMult(){
   m*=qbuff;
   m*=1+0.03*S.xiusui;
   m*=1+S.flags.sijie;
+  m*=1+starFx('qps')+gfFx('qps');
   return m;
 }
 function qps(){ // 每秒灵气
@@ -98,8 +104,54 @@ function heroStats(){
     atk*=e.atk||1;def*=e.def||1;hp*=e.hp||1;
   }
   if(S.flags.fireSeed)atk*=1.15;
+  const sAll=1+starFx('all')+gfFx('all');
+  atk*=sAll*(1+starFx('atk')+gfFx('atk'));
+  def*=sAll*(1+starFx('def')+gfFx('def'));
+  hp*=sAll*(1+starFx('hp')+gfFx('hp'));
+  const eqm=1+0.08*(S.eqLv||0);
+  atk*=eqm;def*=eqm;hp*=eqm;
   return {hp:hp,atk:atk,def:def};
 }
+/* ---------------- 九星专属加成 / 功法 / 每日修为上限 ---------------- */
+function starFx(k){
+  if(!S||!S.starsOpened)return 0;
+  let v=0;
+  for(let i=0;i<S.starsOpened.length;i++){
+    const st=STARS[i]; if(!st)continue;
+    if(st.fx===k)v+=st.fxV;
+    if(k==='qps'&&st.fx==='all')v+=0.25;
+  }
+  return v;
+}
+function gfFx(k){
+  if(!S||!S.gf||!S.gf.on)return 0;
+  const g=GONGFAS.find(x=>x.id===S.gf.on);
+  return (g&&g.fx&&g.fx[k])||0;
+}
+function qiCap(){ // 每日修为上限：随境界、神树、聚灵坠、九星与功法提升
+  return layerCost()*Math.max(1.1,4-0.25*curR())
+    *(1+0.03*livingTrees())
+    *(S.wearing.acc==='julingzhui'?1.15:1)
+    *(1+starFx('cap'))*(1+gfFx('cap'));
+}
+function qiLeft(){return Math.max(0,qiCap()-S.qiToday);}
+/* 统一灵气入口：修炼/打坐/战斗/炼丹/采药/服食/离线，皆经此并受每日上限约束 */
+function addQi(n,src){
+  if(!S||!(n>0))return 0;
+  const got=Math.min(n,qiLeft());
+  if(!(got>0))return 0;
+  S.qi+=got;
+  S.qiToday=(S.qiToday||0)+got;
+  S.stat.qiTotal=(S.stat.qiTotal||0)+got;
+  if(qiLeft()<=0&&!S.flags.qiCapped){
+    S.flags.qiCapped=1;
+    log('story','今日修为已臻圆满（上限 '+fmt(qiCap())+'）——气机圆满，再难纳新。点击「日落而息」进入次日，方可继续精进。');
+  }
+  return got;
+}
+/* 九星传人行动点：司命星与周天功可增 */
+function apMax(r){return 22+r*2+starFx('ap')+gfFx('ap');}
+
 function danRankIdx(){
   let idx=0;
   for(let i=0;i<DAN_EXP.length;i++){ if(S.danExp>=DAN_EXP[i])idx=i; }
@@ -123,7 +175,8 @@ function consumeHerbsGE(t,n){ // 从低品阶开始消耗 n 株 ≥t 品灵植
   return n<=0;
 }
 function randHerbTier(lo,hi){ // 掉落一株区间内随机灵植
-  const t=irnd(Math.max(1,lo),Math.min(10,hi));
+  const a=Math.max(1,Math.min(10,lo)),b=Math.max(a,Math.min(10,hi));
+  const t=irnd(a,b);
   const arr=HERBS_BY_TIER[t];
   return arr[irnd(0,arr.length-1)];
 }
@@ -348,8 +401,8 @@ function resolveSijie(picks){
 /* ---------------- 修炼 ---------------- */
 function meditate(){
   if(!S)return;
-  const gain=qps()*8;
-  S.qi+=gain;
+  const gain=addQi(qps()*8,'med');
+  if(!(gain>0))toast('今日修为已臻圆满——「日落而息」后才能继续纳气');
   const box=$('medGain');
   if(box){box.textContent='+'+fmt(gain);box.style.opacity=1;setTimeout(()=>{if(box)box.style.opacity=0;},350);}
   renderTop();
@@ -387,7 +440,10 @@ function craft(rid){
   if(Math.random()<p){
     S.pills[rc.out]=(S.pills[rc.out]||0)+1;
     S.danExp+=(rc.exp||10);
-    log('good','丹成！【'+PILLS[rc.out].n+'】x1（丹修 '+DAN_RANKS[myRank]+' +'+(rc.exp||10)+' 阅历）');
+    S.stat.crafts=(S.stat.crafts||0)+1;
+    const cq=addQi(layerCost()*0.04,'craft');
+    bumpDaily('craft',1);
+    log('good','丹成！【'+PILLS[rc.out].n+'】x1（丹修 '+DAN_RANKS[myRank]+' +'+(rc.exp||10)+' 阅历'+(cq>0?('，修为 +'+fmt(cq)):'')+'）');
   }else{
     if(rc.matsGE){
       for(const sp of rc.matsGE)consumeHerbsGE(sp.t,Math.floor(sp.n/2));
@@ -455,10 +511,11 @@ function usePill(pid){
       log('good','服下'+p.n+'，神清气爽：状态 +'+Math.round(v)+'。');break;
     }
     case 'qi':{
-      S.pills[pid]--;
       const g=layerCost()*(0.4+0.4*t)*Math.min(m,2);
-      S.qi+=g;
-      log('good',p.n+'化作磅礴灵气：灵气 +'+fmt(g)+'。');break;
+      const got=addQi(g,'pill');
+      if(!(got>0)){toast('今日修为已臻圆满，服之无用——明日再服。');return;}
+      S.pills[pid]--;
+      log('good',p.n+'化作磅礴灵气：修为 +'+fmt(got)+'。');break;
     }
     case 'danxp':{
       S.pills[pid]--;S.danExp+=(15+25*t)*m;
@@ -493,6 +550,7 @@ function sellHerb(hid,qty){
   const t=HERBS[hid].t;
   const price=Math.floor(6*Math.pow(1.6,t))*qty;
   S.herbs[hid]-=qty;S.stones+=price;
+  S.stat.sells=(S.stat.sells||0)+1;bumpDaily('sell',1);
   toast('售出 '+HERBS[hid].n+' x'+qty+'，得灵石 '+fmt(price));
   renderAll();save();
 }
@@ -502,10 +560,11 @@ function eatHerb(hid){
   if(!useAp(AP_EXPLORE,'服食'))return;
   S.herbs[hid]--;
   const mult=herbAttrsMatch(h)?1.5:1;
-  const qi=layerCost()*0.12*h.t*mult;
   const cd=Math.min(100-S.cond,Math.ceil(h.t/2)*mult);
-  S.qi+=qi;S.cond+=cd;
-  log('good','服食【'+h.n+'】（'+h.t+'品'+(herbAttrsMatch(h)?' · 合神火属性':'')+'）：灵气 +'+fmt(qi)+(cd>0?('，状态 +'+Math.ceil(cd)):'')+'。');
+  const qi=addQi(layerCost()*0.12*h.t*mult,'eat');
+  S.cond+=cd;
+  S.stat.eats=(S.stat.eats||0)+1;bumpDaily('eat',1);
+  log('good','服食【'+h.n+'】（'+h.t+'品'+(herbAttrsMatch(h)?' · 合神火属性':'')+'）：修为 +'+fmt(qi)+(cd>0?('，状态 +'+Math.ceil(cd)):'')+'。');
   renderAll();save();
 }
 /* 按品阶整批出售灵植 */
@@ -520,6 +579,7 @@ function sellHerbsTier(t,keep){
   }
   if(n<=0){toast('没有 '+t+' 品灵植可售');return;}
   S.stones+=price;
+  S.stat.sells=(S.stat.sells||0)+1;bumpDaily('sell',1);
   toast('售出 '+t+' 品灵植 x'+n+'，得灵石 '+fmt(price));
   renderAll();save();
 }
@@ -550,20 +610,34 @@ function startBattle(zid,idx,free){
   const z=ZONES.find(x=>x.id===zid); if(!z||!zoneUnlocked(z))return;
   const ed=z.enemies[idx]; if(!ed)return;
   if(!free&&!useAp(AP_BATTLE,'出战'))return;
+  beginBattle(zid,idx,ed,0);
+}
+function rollAffix(ed){
+  if(ed.noAfx)return null;
+  const ch=0.16+0.1*(starFx('drop')+gfFx('drop'));
+  if(ed.boss||Math.random()>=ch)return null;
+  return AFFIXES[Math.floor(Math.random()*AFFIXES.length)];
+}
+function beginBattle(zid,idx,ed,tower){
   const st=heroStats();
-  const ehp=Math.floor(55*Math.pow(2.05,ed.r)*ed.m);
-  const eatk=Math.floor(7*Math.pow(1.95,ed.r)*Math.pow(ed.m,0.6));
+  const afx=tower?null:rollAffix(ed);
+  const hm=afx?(afx.hp||1):1,am=afx?(afx.atk||1):1,dm=afx?(afx.def||1):1;
+  const ehp=Math.floor(55*Math.pow(2.05,ed.r)*ed.m*hm);
+  const eatk=Math.floor(7*Math.pow(1.95,ed.r)*Math.pow(ed.m,0.6)*am);
   B={
-    zid:zid,idx:idx,e:ed,
-    ehp:ehp,emax:ehp,eatk:eatk,edef:Math.floor(eatk*0.45),
+    zid:zid,idx:idx,e:ed,tower:tower||0,afx:afx||null,
+    ehp:ehp,emax:ehp,eatk:eatk,edef:Math.floor(eatk*0.35*dm),
+    shield:(afx&&afx.shield)?Math.floor(ehp*afx.shield):0,
+    dodge:(afx&&afx.dodge)||0,leech:(afx&&afx.leech)||0,
     php:st.hp,pmax:st.hp,patk:st.atk,pdef:st.def,
     mp:60+curR()*8,mpmax:60+curR()*8,
     stun:0,bleedT:0,bleedDmg:0,cds:{},turn:1,over:false,log:[]
   };
-  B.edef=Math.floor(eatk*0.35);
+  if(afx)battleLog('此妖携异象而生——'+afx.n+'！'+afx.d,'bad');
   battleLog(ed.boss?'【'+ed.n+'】仰天长啸，杀气如潮——大战爆发！':'你与【'+ed.n+'】缠斗在一起！','');
   showTab('hunt');
 }
+
 function battleLog(txt,cls){
   if(!B)return;
   B.log.push({c:cls||'',x:txt});
@@ -585,10 +659,18 @@ function useSkill(sid){
   if(sk.cd)B.cds[sid]=sk.cd+1;
   let mult=sk.mult;
   if(sk.effect==='stars')mult=2+0.9*starCnt();
+  if(B.dodge&&Math.random()<B.dodge){
+    battleLog('【'+B.e.n+'】身形一晃，竟避开了你的攻势！','bad');
+    enemyTurn();renderBattle();return;
+  }
   let dmg;
   if(sk.effect==='stun'){dmg=Math.max(B.patk*mult*rnd(0.9,1.15),B.patk*0.2);} // 黑锅：无视防御
   else dmg=Math.max(B.patk*mult*rnd(0.9,1.15)-B.edef*0.55,B.patk*0.12);
   dmg=Math.floor(dmg);
+  if(B.shield>0&&dmg>0){
+    const ab=Math.min(B.shield,dmg);B.shield-=ab;dmg-=ab;
+    battleLog('【'+B.e.n+'】灵光护盾碎裂，抵消 '+fmt(ab)+' 伤害。','bad');
+  }
   B.ehp-=dmg;
   let extra='';
   if(sk.effect==='bleed'){B.bleedT=3;B.bleedDmg=Math.floor(B.patk*0.35);extra='，敌人血流不止';}
@@ -616,6 +698,7 @@ function enemyTurn(){
   }else{
     const dmg=Math.max(Math.floor(B.eatk*rnd(0.85,1.15)-B.pdef*0.55),Math.floor(B.eatk*0.1));
     B.php-=dmg;
+    if(B.leech&&dmg>0)B.ehp=Math.min(B.emax,B.ehp+Math.floor(dmg*B.leech));
     battleLog('【'+B.e.n+'】扑击而来，你受到 '+fmt(dmg)+' 伤害。','bad');
     if(B.php<=0){
       const sp=(S.pills.huming||0)>0?'huming':bestPillOf('save');
@@ -640,22 +723,42 @@ function enemyTurn(){
 function winBattle(){
   if(!B)return;
   B.over=true;
-  const ed=B.e,z=ZONES.find(x=>x.id===B.zid);
-  const stones=Math.floor(30*Math.pow(1.55,ed.r)*ed.m*rnd(0.8,1.3)*(ed.boss?3:1));
+  const ed=B.e;
+  const z=ZONES.find(x=>x.id===B.zid);
+  const dropMul=1+(starFx('drop')+gfFx('drop'))+(B.afx?0.4:0);
+  const gainMul=1+starFx('gain')+gfFx('gain');
+  const stones=Math.floor(30*Math.pow(1.55,ed.r)*ed.m*rnd(0.8,1.3)*(ed.boss?3:1)*dropMul*(B.tower?1.5:1));
   S.stones+=stones;
   let drops='灵石 x'+fmt(stones);
-  if(ed.r>=2&&Math.random()<0.55){S.mats.shouhe=(S.mats.shouhe||0)+1;drops+='，兽核 x1';}
-  if(Math.random()<0.35){
-    const h=dropHerb(z);
+  if(ed.r>=2&&Math.random()<Math.min(0.95,0.55*dropMul)){S.mats.shouhe=(S.mats.shouhe||0)+1;drops+='，兽核 x1';}
+  if(Math.random()<Math.min(0.95,0.35*dropMul)){
+    const h=z?dropHerb(z):randHerbTier(Math.max(1,ed.r-1),Math.min(10,ed.r+1));
     S.herbs[h]=(S.herbs[h]||0)+1;drops+='，'+HERBS[h].n+' x1';
   }
-  const qiGain=qps()*3;S.qi+=qiGain;
-  battleLog('【'+ed.n+'】轰然倒下！获得 '+drops+'，战意化灵，灵气+'+fmt(qiGain)+'。','good');
+  const qiGain=addQi(layerCost()*(0.05+0.02*ed.m)*(ed.boss?2.5:1)*gainMul,'battle');
+  S.stat.kills=(S.stat.kills||0)+1;
+  if(ed.boss)S.stat.bosses=(S.stat.bosses||0)+1;
+  bumpDaily('kill',1);
+  battleLog('【'+ed.n+'】轰然倒下！获得 '+drops+(qiGain>0?('，战意化灵，修为+'+fmt(qiGain)):'')+'。','good');
   log('good','斩杀【'+ed.n+'】！'+drops);
-  const key=B.zid+':'+B.idx;
-  S.kills[key]=(S.kills[key]||0)+1;
+  if(B.zid==='tower'){
+    const f=B.tower;
+    if(f>(S.towerBest||0)){
+      S.towerBest=f;
+      log('story','九星塔第 '+f+' 层已克——塔身轰鸣，星光如雨洒落。');
+      const g=GONGFAS.find(x=>x.floor===f);
+      if(g&&!S.gf.own[g.id]){
+        S.gf.own[g.id]=1;
+        if(!S.gf.on)S.gf.on=g.id;
+        log('story','塔心石台之上，一部功法悬光而立——你参悟得【'+g.name+'】！'+g.d);
+        toast('习得功法【'+g.name+'】！','good');
+      }
+    }
+  }else{
+    const key=B.zid+':'+B.idx;
+    S.kills[key]=(S.kills[key]||0)+1;
+  }
   if(ed.final){
-    B.over=true;
     S.flags.won=1;
     log('story','九天邪皇的分身在你拳下崩解成漫天星尘……手握乾坤，脚踏星辰——这一方天地，再无人敢小觑人族！');
     checkQuests();save();
@@ -663,6 +766,7 @@ function winBattle(){
   }
   checkQuests();save();
 }
+
 function flee(){
   if(!B||B.over)return;
   if(Math.random()<0.6){
@@ -702,9 +806,12 @@ function explore(zid){
   const h=dropHerb(z);
   const n=irnd(2,5);
   S.herbs[h]=(S.herbs[h]||0)+n;
-  const st=Math.floor(15*Math.pow(1.55,z.enemies[0].r)*rnd(0.8,1.3));
+  const st=Math.floor(15*Math.pow(1.55,z.enemies[0].r)*rnd(0.8,1.3)*(1+starFx('drop')+gfFx('drop')));
   S.stones+=st;
-  log('good','在【'+z.name+'】采到 '+HERBS[h].n+' x'+n+'，顺手得了些灵石（'+fmt(st)+'）。');
+  const eq=addQi(layerCost()*0.02,'explore');
+  S.stat.explores=(S.stat.explores||0)+1;
+  bumpDaily('explore',1);
+  log('good','在【'+z.name+'】采到 '+HERBS[h].n+' x'+n+'，顺手得了些灵石（'+fmt(st)+'）'+(eq>0?('，气机微动，修为 +'+fmt(eq)):'')+'。');
   if(Math.random()<0.14)doEvent(z);
   renderAll();save();
 }
@@ -758,7 +865,7 @@ function openStar(i){
   if(S.stones<st.stones){toast('灵石不足：需 '+fmt(st.stones));return;}
   S.qi-=qiCost;S.stones-=st.stones;
   S.starsOpened.push(st.name);
-  log('story','轰！！体内第九重禁制应声而开——【'+st.name+'星】（'+st.alias+'）秘藏现世！九星之数又添其一，灵气如百川灌海。');
+  log('story','轰！！体内第九重禁制应声而开——【'+st.name+'】（'+st.alias+'）秘藏现世！九星之数又添其一，灵气如百川灌海。');
   toast('开启九星秘藏【'+st.name+'】！','good');
   if(starCnt()>=9){
     log('story','九星连珠，霸体觉醒！九大秘藏一气贯通，你已是真正意义上的——九星霸体！');
@@ -816,6 +923,7 @@ function checkQuests(){
       toast('剧情完成：'+q.name,'good');
     }
   }
+  checkAch();
 }
 function undoneQuests(){
   return QUESTS.filter(q=>!S.quests[q.id]).slice(0,3);
@@ -905,10 +1013,142 @@ function buyBeast(bid){
   renderAll();save();
 }
 
+/* ---------------- 每日悬赏 ---------------- */
+function rngFor(seed){
+  let x=seed%2147483647; if(x<=0)x+=2147483646;
+  return function(){x=(x*48271)%2147483647;return x/2147483647;};
+}
+function ensureDaily(){
+  if(!S)return;
+  if(S.daily&&S.daily.day===S.day&&S.daily.qs&&S.daily.qs.length&&S.daily.cnt)return;
+  const r=rngFor(S.day*7919+curR()*104729+13);
+  const idxs=[];
+  while(idxs.length<3){
+    const k=Math.floor(r()*DAILY_TYPES.length)%DAILY_TYPES.length;
+    if(idxs.indexOf(k)<0)idxs.push(k);
+  }
+  S.daily={day:S.day,qs:idxs,
+    prog:idxs.map(()=>0),done:idxs.map(()=>0),
+    cnt:idxs.map(i=>dailyCount(DAILY_TYPES[i].k,curR())),
+    rw:idxs.map(i=>dailyReward(DAILY_TYPES[i].k,curR()))};
+}
+function bumpDaily(k,n){
+  if(!S||!S.daily||!S.daily.qs)return;
+  ensureDaily();
+  for(let i=0;i<S.daily.qs.length;i++){
+    if(DAILY_TYPES[S.daily.qs[i]].k!==k||S.daily.done[i])continue;
+    S.daily.prog[i]=Math.min(S.daily.cnt[i],S.daily.prog[i]+(n||1));
+    if(S.daily.prog[i]>=S.daily.cnt[i]){
+      S.daily.done[i]=1;
+      const t=DAILY_TYPES[S.daily.qs[i]];
+      const got=S.daily.rw[i];
+      S.stones+=got;
+      const qg=addQi(layerCost()*(0.10+0.02*curR()),'daily');
+      const tt=Math.max(1,Math.min(10,curR()+1));
+      const cands=Object.keys(PILLS).filter(pid=>PILLS[pid].m!==undefined&&PILLS[pid].t<=tt&&['qi','cond','ap','danxp','heal','qpsb'].indexOf(PILLS[pid].f)>=0);
+      const gp=cands.length?cands[Math.floor(Math.random()*cands.length)]:null;
+      if(gp)S.pills[gp]=(S.pills[gp]||0)+1;
+      log('good','【悬赏完成 · '+t.n+'】灵石 +'+fmt(got)+'，修为 +'+fmt(qg)+(gp?('，获赏【'+PILLS[gp].n+'】x1'):''));
+      toast('悬赏完成：'+t.n,'good');
+    }
+  }
+}
+
+/* ---------------- 九星塔 ---------------- */
+function towerFloorEnemy(f){
+  const r=Math.min(21,Math.floor((f-1)/5));
+  const boss=f%TOWER_BOSS_EVERY===0?1:0;
+  const seed=f*7+3;
+  const name=ZN_MOD[seed%12]+ZN_BEAST[(seed*3)%17]+(boss?'王':'');
+  return {n:name,r:r,m:TOWER_MUL*f*(boss?1.6:1),boss:boss,noAfx:1};
+}
+function startTower(){
+  if(!useAp(AP_TOWER,'闯塔'))return;
+  S.stat.towers=(S.stat.towers||0)+1;
+  bumpDaily('tower',1);
+  const f=(S.towerBest||0)+1;
+  const ed=towerFloorEnemy(f);
+  beginBattle('tower',-1,ed,f);
+  battleLog('九星塔第 '+f+' 层——【'+ed.n+'】当道，登塔！','');
+}
+
+/* ---------------- 装备强化 / 灵兽升级 / 功法装备 ---------------- */
+function upEqCost(){return Math.floor(2000*Math.pow(2.1,S.eqLv||0));}
+function upgradeEq(){
+  const lv=S.eqLv||0;
+  if(lv>=10){toast('神兵淬炼已至 +10 圆满');return;}
+  const cost=upEqCost();
+  if(S.stones<cost){toast('淬炼费用不足：需 '+fmt(cost)+' 灵石');return;}
+  S.stones-=cost;S.eqLv=lv+1;
+  log('good','以星辉砂淬炼随身神兵——装备强化 '+(lv+1)+' 级（攻防气血 +'+(8*(lv+1))+'%）。');
+  renderAll();save();
+}
+function feedBeast(i,hid){
+  const b=S.pearl.beasts[i]; if(!b)return;
+  const lv=b.lv||1;
+  if(lv>=10){toast('此兽已臻十阶圆满');return;}
+  const h=HERBS[hid];
+  if(!h||((S.herbs[hid]||0)<5)){toast('需同种灵植 x5 喂养');return;}
+  if(h.t<lv){toast('需 '+lv+' 品及以上灵植（'+h.n+' 仅 '+h.t+' 品）');return;}
+  S.herbs[hid]-=5;b.lv=lv+1;
+  log('good','【'+BEASTS[b.t].n+'】吞食灵植，灵性大涨——升至 '+(lv+1)+' 阶（产出 ×'+(1+0.3*lv).toFixed(1)+'）。');
+  closeModal();renderAll();save();
+}
+function openFeedBeast(i){
+  const b=S.pearl.beasts[i];if(!b)return;
+  const lv=b.lv||1;
+  const ids=Object.keys(S.herbs).filter(id=>(S.herbs[id]||0)>=5&&HERBS[id]&&HERBS[id].t>=lv)
+    .sort((x,y)=>HERBS[x].t-HERBS[y].t);
+  if(!ids.length){toast('没有可喂的灵植（需 '+lv+' 品及以上 x5）');return;}
+  const opts=ids.map(id=>'<option value="'+id+'">'+HERBS[id].n+' x'+S.herbs[id]+'（'+HERBS[id].t+'品）</option>').join('');
+  openModal('<h2>喂养 · '+BEASTS[b.t].n+'（'+lv+' 阶）</h2>'+
+   '<p class="small">以 5 株 '+lv+' 品及以上灵植喂养，灵性增长一阶（至多十阶），产出每阶 ×1.3。</p>'+
+   '<select class="fin" id="feedPick">'+opts+'</select>'+
+   '<div style="margin-top:10px"><button class="btn jade" onclick="feedBeast('+i+',document.getElementById(\'feedPick\').value)">喂食（5 株）</button></div>');
+}
+function equipGf(gid){
+  if(!S.gf.own[gid]){toast('尚未习得此功法');return;}
+  S.gf.on=(S.gf.on===gid)?null:gid;
+  const g=GONGFAS.find(x=>x.id===gid);
+  toast(S.gf.on?('运功【'+g.name+'】'):'收功');
+  renderAll();save();
+}
+
+/* ---------------- 成就 / 图鉴收录 ---------------- */
+function achVal(a){
+  switch(a.kind){
+    case 'g':return S.g;
+    case 'stars':return starCnt();
+    case 'tower':return S.towerBest||0;
+    case 'bones':return S.bones;
+    case 'danExp':return S.danExp;
+    case 'days':return S.day;
+    default:return S.stat[a.kind]||0;
+  }
+}
+function checkAch(){
+  if(!S)return;
+  for(const id in S.herbs)if((S.herbs[id]||0)>0)S.seen.h[id]=1;
+  for(const id in S.pills)if((S.pills[id]||0)>0)S.seen.p[id]=1;
+  for(const a of ACHS){
+    if(S.ach[a.id])continue;
+    if(achVal(a)>=a.v){
+      S.ach[a.id]=1;
+      const txt=[];
+      if(a.rw.stones){S.stones+=a.rw.stones;txt.push('灵石 +'+fmt(a.rw.stones));}
+      if(a.rw.pill){S.pills[a.rw.pill]=(S.pills[a.rw.pill]||0)+1;txt.push(PILLS[a.rw.pill].n+' x1');}
+      if(a.rw.ap){S.ap+=a.rw.ap;txt.push('行动点 +'+a.rw.ap);}
+      log('good','【成就达成 · '+a.n+'】'+(txt.length?('奖励：'+txt.join('、')):''));
+      toast('成就达成：'+a.n,'good');
+    }
+  }
+}
+
 /* ---------------- 日落而息：进入下一日 ---------------- */
 function nextDay(){
   S.day++;
   S.ap=apMax(curR());
+  S.qiToday=0;S.flags.qiCapped=0;
   // 神树衰减
   let withered=0;
   for(const t of S.pearl.trees){
@@ -923,9 +1163,10 @@ function nextDay(){
   let outTxt=[];
   for(const bd of S.pearl.beasts){
     const b=BEASTS[bd.t]; if(!b)continue;
-    if(b.out==='stones'){const g=b.qty(curR());S.stones+=g;outTxt.push('灵石 x'+fmt(g));}
-    else if(b.out==='lingcao'){S.herbs.lingcao=(S.herbs.lingcao||0)+b.qty;outTxt.push('灵草 x'+b.qty);}
-    else if(b.out==='shouhe'){S.mats.shouhe=(S.mats.shouhe||0)+b.qty;outTxt.push('兽核 x'+b.qty);}
+    const om=1+0.3*(((bd.lv||1))-1);
+    if(b.out==='stones'){const g=Math.floor(b.qty(curR())*om);S.stones+=g;outTxt.push('灵石 x'+fmt(g));}
+    else if(b.out==='lingcao'){const g=Math.floor(b.qty*om);S.herbs.lingcao=(S.herbs.lingcao||0)+g;outTxt.push('灵草 x'+g);}
+    else if(b.out==='shouhe'){const g=Math.floor(b.qty*om);S.mats.shouhe=(S.mats.shouhe||0)+g;outTxt.push('兽核 x'+g);}
   }
   // 灵植生长提示
   const ready=S.pearl.plants.filter(p=>S.day-p.d>=growDays(HERBS[p.h].t)).length;
@@ -934,6 +1175,7 @@ function nextDay(){
     (outTxt.length?('　灵兽产出：'+outTxt.join('、')):'')+
     (ready?('　有 '+ready+' 株灵植已然成熟。'):''));
   if(S.cond<40)log('bad','状态萎靡——修炼缓慢、战力打折。多植神树、及早浇灌，方能日日精进。');
+  ensureDaily();
   checkQuests();renderAll();save();
 }
 
@@ -943,6 +1185,7 @@ function sellCore(qty){
   qty=Math.min(qty,have); if(qty<=0)return;
   const price=corePrice(curR())*qty;
   S.mats.shouhe-=qty;S.stones+=price;
+  S.stat.sells=(S.stat.sells||0)+1;bumpDaily('sell',1);
   toast('售出 兽核 x'+qty+'，得灵石 '+fmt(price));
   renderAll();save();
 }
@@ -951,6 +1194,7 @@ function sellPill(pid,qty){
   qty=Math.min(qty,have); if(qty<=0)return;
   const price=pillPrice(pid,curR())*qty;
   S.pills[pid]-=qty;S.stones+=price;
+  S.stat.sells=(S.stat.sells||0)+1;bumpDaily('sell',1);
   toast('售出 '+PILLS[pid].n+' x'+qty+'，得灵石 '+fmt(price));
   renderAll();save();
 }
@@ -963,6 +1207,8 @@ const TABS=[
  {id:'market',n:'商行'},
  {id:'pearl',n:'珠内'},
  {id:'bag',n:'行囊'},
+ {id:'tower',n:'九星塔'},
+ {id:'codex',n:'图鉴'},
  {id:'stars',n:'九星'},
  {id:'realms',n:'境界'},
 ];
@@ -988,6 +1234,7 @@ function renderTop(){
    '<div class="it"><span>灵气'+(buff.length?' '+buff.join(' '):'')+'</span><b>'+fmt(S.qi)+'</b></div>'+
    '<div class="it"><span>灵石</span><b>'+fmt(S.stones)+'</b></div>'+
    '<div class="it"><span>修炼速度</span><b>'+fmt(qps())+'/秒</b></div>'+
+   '<div class="it"><span>今日修为'+(qiLeft()<=0?'<span class="blood">满</span>':'')+'</span><b>'+fmt(S.qiToday)+' / '+fmt(qiCap())+'</b></div>'+
    '<div class="it"><span>今日行动点</span><b>'+S.ap+' / '+apMax(curR())+'</b></div>'+
    '<div class="it"><span>状态</span><b class="'+condCls+'">'+Math.round(S.cond)+'%</b></div>'+
    '<div class="it"><span>气血</span><b>'+fmt(st.hp)+'</b></div>'+
@@ -1037,6 +1284,7 @@ function renderCult(){
      '<div class="panel"><h3>打坐修炼</h3>'+
      '<p class="small">九星霸体诀不修丹田，而修九星。灵气每秒 +'+fmt(qps())+'（当前速度 '+S.speed+'x）</p>'+
      '<div class="bar" style="margin:8px 0"><i style="width:'+clamp(S.qi/cost*100,0,100)+'%"></i><span>'+fmt(S.qi)+' / '+fmt(cost)+'</span></div>'+
+     '<div class="bar slim" style="margin:0 0 8px"><i style="width:'+clamp(S.qiToday/qiCap()*100,0,100)+'%"></i><span>今日修为 '+fmt(S.qiToday)+' / '+fmt(qiCap())+(qiLeft()<=0?'（已满，日落而息后恢复）':'')+'</span></div>'+
      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
        '<button class="btn big" onclick="meditate()">运转周天</button><span id="medGain" class="gold" style="opacity:0;transition:opacity .3s"></span>'+
      '</div>'+
@@ -1063,7 +1311,8 @@ function renderCult(){
    '</div>'+
    '<div>'+
      '<div class="panel"><h3>九星图</h3>'+starWheelSvg()+
-     '<p class="small muted" style="text-align:center">已开启 '+starCnt()+' / 9 —— 每开启一星：修炼 x2.1、全属性 +18%</p></div>'+
+     '<p class="small muted" style="text-align:center">已开启 '+starCnt()+' / 9 —— 每星皆有专属神通，详见「九星」页</p></div>'+
+     dailyPanelHtml()+
      '<div class="panel"><h3>剧情 · 待办</h3>'+
      (qs.length?qs.map(q=>'<div class="row-item"><div class="info"><div class="nm">'+q.name+'</div><div class="small muted">'+q.desc+'</div></div></div>').join(''):'<p class="small muted">诸事已了。</p>')+
      '</div>'+
@@ -1092,7 +1341,7 @@ function renderHunt(){
       return '<button class="btn'+(cd||B.mp<s.qi?' ghost':'')+'" '+(B.over?'disabled':'')+' onclick="useSkill(\''+s.id+'\')">'+s.name+
         '<div class="small">威 x'+(s.effect==='stars'?(2+0.9*starCnt()).toFixed(1):s.mult)+'　灵力 '+s.qi+(cd?('　冷'+cd):'')+'</div></button>';
     }).join('');
-    html='<div class="panel"><h3>战斗 · '+B.e.n+(B.e.boss?' <span class="boss-tag" style="color:var(--blood);font-size:12px;border:1px solid var(--blood);border-radius:4px;padding:0 4px">首领</span>':'')+'</h3>'+
+    html='<div class="panel"><h3>战斗 · '+B.e.n+(B.afx?' <span class="afx">'+B.afx.n+'</span>':'')+(B.tower?' <span class="afx">塔'+B.tower+'层</span>':'')+(B.e.boss?' <span class="boss-tag" style="color:var(--blood);font-size:12px;border:1px solid var(--blood);border-radius:4px;padding:0 4px">首领</span>':'')+'</h3>'+
      '<div class="fighter"><div class="nm"><span class="jade">龙尘</span><span>'+fmt(Math.max(0,B.php))+' / '+fmt(B.pmax)+'</span></div>'+
      '<div class="bar hp"><i style="width:'+clamp(B.php/B.pmax*100,0,100)+'%"></i><span>气血</span></div>'+
      '<div class="bar mp" style="margin-top:3px"><i style="width:'+clamp(B.mp/B.mpmax*100,0,100)+'%"></i><span>灵力 '+Math.floor(B.mp)+'</span></div></div>'+
@@ -1317,10 +1566,12 @@ function renderPearl(){
      '<div class="bar" style="height:10px;margin-top:3px"><i style="width:'+t.vigor+'%"></i><span style="line-height:10px;font-size:10px">茂盛 '+t.vigor+'</span></div></div>'+
      '<span class="small '+cls+'">每日 -'+TREE_DAILY_DECAY+'</span></div>';
   }).join('');
-  const beasts=S.pearl.beasts.map(b=>{
+  const beasts=S.pearl.beasts.map((b,i)=>{
     const d=BEASTS[b.t]; if(!d)return '';
-    const out=d.out==='stones'?('灵石 x'+fmt(d.qty(r))):(d.out==='lingcao'?('灵草 x'+d.qty):('兽核 x'+d.qty));
-    return '<div class="row-item"><div class="info"><div class="nm">🐾 '+d.n+'</div><div class="small muted">每日产出：'+out+'</div></div></div>';
+    const lv=b.lv||1,om=1+0.3*(lv-1);
+    const out=d.out==='stones'?('灵石 x'+fmt(Math.floor(d.qty(r)*om))):(d.out==='lingcao'?('灵草 x'+Math.floor(d.qty*om)):('兽核 x'+Math.floor(d.qty*om)));
+    return '<div class="row-item"><div class="info"><div class="nm">🐾 '+d.n+' <span class="tag">'+lv+'阶</span></div><div class="small muted">每日产出：'+out+'（每阶 ×1.3）</div></div>'+
+     '<button class="btn ghost" onclick="openFeedBeast('+i+')">喂养</button></div>';
   }).join('');
   $('main').innerHTML='<div class="grid2"><div>'+
    '<div class="panel"><h3>混沌珠 · 混沌小世界</h3>'+
@@ -1364,6 +1615,8 @@ function renderBag(){
       '<div class="small muted">'+e.d+'</div></div>'+
       (on?'<span class="jade small">穿戴中</span>':'<button class="btn" onclick="equipItem(\''+eid+'\')">穿戴</button>')+'</div>';
    }).join(''):'<p class="small muted">身无长物——去历练寻宝吧。</p>')+
+   '<div style="margin-top:8px"><button class="btn jade" onclick="upgradeEq()">淬炼全身（+'+(S.eqLv||0)+' → +'+Math.min(10,(S.eqLv||0)+1)+'，'+fmt(upEqCost())+' 灵石）</button>'+
+   '<span class="small muted">　每级攻防气血 +8%，至多 +10</span></div>'+
    '<hr class="hr"><div class="small muted">已穿戴：'+
      (['weapon','armor','treasure','acc'].map(s=>S.wearing[s]?EQ[S.wearing[s]].n:'——').join(' ｜ '))+'</div>'+
    '<hr class="hr"><div class="small">兽核 x'+(S.mats.shouhe||0)+'<span class="muted">（炼丹材料）</span></div></div>'+
@@ -1411,13 +1664,80 @@ function renderStars(){
      const can=isNext&&realmOk&&S.qi>=qiCost&&S.stones>=st.stones;
      return '<div class="row-item"><div class="info"><div class="nm">'+st.name+' · '+st.alias+
       (opened?'<span class="tag rank">已开</span>':'')+'</div>'+
+      '<div class="small muted">'+(st.d||'')+'</div>'+
       '<div class="small muted">需 '+REALMS[st.reqR].name+' ｜ 灵气 '+fmt(qiCost)+' ｜ 灵石 '+fmt(st.stones)+'</div></div>'+
       (opened?'<span class="jade small">✦</span>':(isNext?'<button class="btn" '+(can?'':'disabled')+' onclick="openStar('+i+')">开启</button>':'<span class="small muted">待前置</span>'))+
       '</div>';
    }).join('')+
-   '<hr class="hr"><p class="small">每星：修炼速度 x2.1、全属性 +18%。九星归位：霸体觉醒，全属性再翻倍，九星连珠威力大成。</p>'+
+   '<hr class="hr"><p class="small">每星专属神通见上；开启另得修炼速度 x2.1 与全属性 +18%。九星归位：霸体觉醒，全属性再翻倍。</p>'+
    '</div></div>';
 }
+/* ---------------- 每日悬赏面板 / 九星塔页 / 图鉴页 ---------------- */
+function dailyPanelHtml(){
+  ensureDaily();
+  const D=S.daily;
+  const rows=D.qs.map((qi,i)=>{
+    const t=DAILY_TYPES[qi],p=D.prog[i],n=D.cnt[i];
+    return '<div class="row-item"><div class="info"><div class="nm">'+t.n+' <span class="small muted">'+t.txt(n)+'</span></div>'+
+     '<div class="bar slim" style="margin-top:3px"><i style="width:'+clamp(p/n*100,0,100)+'%"></i><span>'+p+' / '+n+(D.done[i]?' ✓':'')+'</span></div>'+
+     '<div class="small muted">赏：灵石 '+fmt(D.rw[i])+' + 修为与随机丹药</div></div></div>';
+  }).join('');
+  return '<div class="panel"><h3>每日悬赏（第 '+D.day+' 日）</h3>'+
+   '<p class="small muted">凤鸣城悬赏榜每日张榜三条，日落而息后换榜。</p>'+rows+'</div>';
+}
+function renderTower(){
+  const f=(S.towerBest||0)+1;
+  const ed=towerFloorEnemy(f);
+  const done=GONGFAS.filter(g=>S.gf.own[g.id]).length;
+  $('main').innerHTML='<div class="grid2"><div>'+
+   '<div class="panel"><h3>九星塔</h3>'+
+   '<p class="small muted">凤鸣城外一座无名高塔，塔身暗合九星之数。塔中妖魔层层而强，每十层一头守塔妖王；里程碑层藏有上古功法遗篇。</p>'+
+   '<p class="small">当前：<b class="gold">第 '+f+' 层</b> ｜ 最佳：<b>'+S.towerBest+'</b> 层 ｜ 功法 <b>'+done+'/'+GONGFAS.length+'</b> 部</p>'+
+   '<p class="small">镇守妖兽：【'+ed.n+'】'+(ed.boss?'<span class="boss-tag">妖王</span>':'')+' <span class="tag">'+REALMS[ed.r].name+'</span>（强度 x'+ed.m.toFixed(2)+'）</p>'+
+   '<div style="margin-top:8px"><button class="btn big" onclick="startTower()">挑战此层（'+AP_TOWER+' 行动点）</button></div>'+
+   '<p class="small muted">胜则上一层，得灵石与修为；败则原地歇息，再战不迟。</p></div>'+
+   '</div><div>'+
+   '<div class="panel"><h3>功法（同时运功一部）</h3>'+
+   GONGFAS.map(g=>{
+     const own=!!S.gf.own[g.id],on=S.gf.on===g.id;
+     return '<div class="row-item"><div class="info"><div class="nm">'+g.name+
+      (own?'<span class="tag rank">已习</span>':'<span class="tag no">第 '+g.floor+' 层</span>')+(on?'<span class="tag">运功中</span>':'')+'</div>'+
+      '<div class="small muted">'+g.d+'</div></div>'+
+      (own?'<button class="btn'+(on?' ghost':'')+'" onclick="equipGf(\''+g.id+'\')">'+(on?'收功':'运功')+'</button>':'')+'</div>';
+   }).join('')+
+   '</div></div></div>';
+}
+
+let dexTab='h',dexTier=0,dexN=120;
+function renderCodex(){
+  const hAll=Object.keys(HERBS).length,pAll=Object.keys(PILLS).length;
+  const hs=Object.keys(S.seen.h||{}).filter(id=>HERBS[id]).sort((a,b)=>HERBS[a].t-HERBS[b].t||HERBS[a].n.localeCompare(HERBS[b].n,'zh'));
+  const ps=Object.keys(S.seen.p||{}).filter(id=>PILLS[id]).sort((a,b)=>(PILLS[a].t||0)-(PILLS[b].t||0));
+  const src=dexTab==='h'?hs:ps;
+  const list=src.filter(id=>!dexTier||(dexTab==='h'?HERBS[id].t:(PILLS[id].t||0))===dexTier);
+  const total=list.length;
+  const shown=list.slice(0,dexN);
+  const tierOpts=[0,1,2,3,4,5,6,7,8,9,10].map(t=>'<option value="'+t+'"'+(dexTier===t?' selected':'')+'>'+(t?('限 '+t+' 品'):'不限品阶')+'</option>').join('');
+  const rows=shown.map(id=>{
+    const it=dexTab==='h'?HERBS[id]:PILLS[id];
+    return '<div class="row-item"><div class="info"><div class="nm">'+it.n+'<span class="tag">'+(it.t||1)+'品</span>'+
+     (dexTab==='h'?('<span class="tag">'+HERB_ATTRS[it.a]+'系</span>'):'')+'</div>'+
+     '<div class="small muted">'+(it.d||'服食可得灵气与状态；亦可入药、出售。')+'</div></div></div>';
+  }).join('');
+  $('main').innerHTML='<div class="grid2"><div class="panel">'+
+   '<h3>大千图鉴</h3>'+
+   '<p class="small">灵植 <b class="gold">'+hs.length+' / '+hAll+'</b> ｜ 丹药 <b class="gold">'+ps.length+' / '+pAll+'</b><span class="small muted">（收录你获得过的品类）</span></p>'+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0">'+
+    '<button class="btn'+(dexTab==='h'?'':' ghost')+'" onclick="dexTab=\'h\';dexN=120;renderCodex()">灵植谱</button>'+
+    '<button class="btn'+(dexTab==='p'?'':' ghost')+'" onclick="dexTab=\'p\';dexN=120;renderCodex()">丹药谱</button>'+
+    '<select class="fin" onchange="dexTier=+this.value;dexN=120;renderCodex()">'+tierOpts+'</select>'+
+   '</div>'+
+   '<p class="small muted">共 '+total+' 条符合筛选，显示前 '+Math.min(dexN,total)+' 条。</p>'+
+   (rows||'<p class="small muted">尚未见录——去采药、炼丹吧。</p>')+
+   (total>dexN?'<div style="text-align:center;margin:8px"><button class="btn ghost" onclick="dexN+=120;renderCodex()">显示更多</button></div>':'')+
+   '</div></div>';
+}
+
 function renderRealms(){
   const r=curR();
   $('main').innerHTML='<div class="grid2"><div class="panel"><h3>境界阶梯（九星传人 · 每境十三层）</h3><div class="ladder">'+
@@ -1470,6 +1790,8 @@ function renderAll(){
   else if(curTab==='market')renderMarket();
   else if(curTab==='pearl')renderPearl();
   else if(curTab==='bag')renderBag();
+  else if(curTab==='tower')renderTower();
+  else if(curTab==='codex')renderCodex();
   else if(curTab==='stars')renderStars();
   else if(curTab==='realms')renderRealms();
 }
@@ -1481,7 +1803,7 @@ function loop(){
   const dt=Math.min((now-lastLoop)/1000,5);
   lastLoop=now;tickN++;
   if(!S)return;
-  S.qi+=qps()*dt*S.speed;
+  addQi(qps()*dt*S.speed,'loop');
   // 自动冲击（跳过特殊境界，避免误触天劫/材料关卡）
   if(S.autobreak&&!B&&!P){
     const r=curR(),l=curL(),toR=r+1;
@@ -1538,9 +1860,9 @@ function init(){
   // 离线收益
   const away=Math.min((Date.now()-S.lastTick)/1000,8*3600);
   if(away>60){
-    const gain=qps()*away*0.5*S.speed;
-    S.qi+=gain;
-    setTimeout(()=>toast('闭关归来：离关 '+Math.floor(away/60)+' 分钟，灵气 +'+fmt(gain),'good'),600);
+    const rawGain=qps()*away*0.5*S.speed;
+    const gain=addQi(rawGain,'offline');
+    setTimeout(()=>toast('闭关归来：离关 '+Math.floor(away/60)+' 分钟，修为 +'+fmt(gain)+(gain<rawGain?'（受每日上限所限）':''),'good'),600);
   }
   renderAll();
   if(!S.flags.intro)openIntro();

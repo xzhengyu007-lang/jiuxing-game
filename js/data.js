@@ -147,16 +147,25 @@ const ZONES=[
 
 /* ---------- 九星（北斗九星之名，对应人体九大秘藏） ---------- */
 const STARS=[
- {name:'天枢',alias:'贪狼',reqR:1, qiMul:15,  stones:500},
- {name:'天璇',alias:'巨门',reqR:2, qiMul:20,  stones:2200},
- {name:'天玑',alias:'禄存',reqR:3, qiMul:30,  stones:7000},
- {name:'天权',alias:'文曲',reqR:4, qiMul:45,  stones:18000},
- {name:'玉衡',alias:'廉贞',reqR:5, qiMul:70,  stones:45000},
- {name:'开阳',alias:'武曲',reqR:6, qiMul:110, stones:12e4},
- {name:'摇光',alias:'破军',reqR:7, qiMul:170, stones:30e4},
- {name:'洞明',alias:'左辅',reqR:9, qiMul:260, stones:75e4},
- {name:'隐光',alias:'右弼',reqR:11,qiMul:400, stones:180e4},
-];
+ {name:'风府星',alias:'灵窍初开',fx:'qps',  fxV:0.25,reqR:1, qiMul:15,  stones:500,
+  d:'风府为九星之门户：开启后灵气出入如风，修炼速度 +25%。'},
+ {name:'玉衡星',alias:'执掌天平',fx:'cap',  fxV:0.30,reqR:2, qiMul:20,  stones:2200,
+  d:'玉衡主衡准：每日修为上限 +30%，一日可多得三成造化。'},
+ {name:'司命星',alias:'生死簿',  fx:'ap',   fxV:4,   reqR:3, qiMul:30,  stones:7000,
+  d:'司命掌寿数：每日行动点 +4，一日抵人两日。'},
+ {name:'宫启星',alias:'开天门',  fx:'atk',  fxV:0.30,reqR:4, qiMul:45,  stones:18000,
+  d:'宫启为战伐之门：攻击 +30%，一力破万法。'},
+ {name:'神关星',alias:'天阙',    fx:'def',  fxV:0.30,reqR:5, qiMul:70,  stones:45000,
+  d:'神关为守护之隘：防御与气血 +30%，不动如山。'},
+ {name:'冥门星',alias:'幽都',    fx:'drop', fxV:0.50,reqR:6, qiMul:110, stones:12e4,
+  d:'冥门通幽冥：妖兽精英与宝物现世之率大增，掉落 +50%。'},
+ {name:'紫阙星',alias:'帝庭',    fx:'craft',fxV:0.15,reqR:7, qiMul:170, stones:30e4,
+  d:'紫阙居帝庭：丹道通神，炼丹成功率 +15%。'},
+ {name:'涅冲星',alias:'浴火',    fx:'gain', fxV:0.50,reqR:9, qiMul:260, stones:75e4,
+  d:'涅冲主轮回：战斗与采药所得 +50%，置之死地而后生。'},
+ {name:'镇道星',alias:'万古',    fx:'all',  fxV:0.50,reqR:11,qiMul:400, stones:180e4,
+  d:'镇道为九星之首：全属性 +50%、修炼速度再 +25%，一星镇万道。'},
+];;
 
 /* ---------- 神火之种属性（原著：金木水火土风雷光暗魂……） ---------- */
 const FIRE_SEEDS=['金','木','水','火','土','风','雷','光','暗','魂'];
@@ -211,20 +220,21 @@ function corePrice(r){return Math.floor(40*Math.pow(1.5,r));} // 兽核收购价
  * 大千世界（程序生成）：千种灵植 · 三百余丹药 · 诸境地图
  * ============================================================ */
 
-/* ---------- 千种灵植：10 属性 × 10 品阶 × 10 变体（+10 奇珍 = 1010 种） ---------- */
+/* ---------- 千种灵植：10 属性 × 10 品阶 × 20 变体（+10 奇珍 = 2010 种） ---------- */
 const HERB_ATTRS=['金','木','水','火','土','风','雷','光','暗','魂'];
-const HERB_VARS=['霜','月','幽','云','霞','古','龙','凤','神','圣'];
+const HERB_VARS=['霜','月','幽','云','霞','古','龙','凤','神','圣',
+ '御','魔','仙','冥','霄','罡','玄','荒','曜','墟'];
 const HERB_BODIES=['草','参','芝','花','藤','果','莲','兰','葵','蕨'];
 (function(){
-  for(let b=0;b<10;b++)for(let v=0;v<10;v++)for(let a=0;a<10;a++){
+  for(let b=0;b<10;b++)for(let v=0;v<HERB_VARS.length;v++)for(let a=0;a<10;a++){
     HERBS['x'+v+''+a+''+b]={n:HERB_VARS[v]+HERB_ATTRS[a]+HERB_BODIES[b],t:b+1,a:a};
   }
 })();
 const HERBS_BY_TIER=[null];
 for(let t=1;t<=10;t++)HERBS_BY_TIER.push(Object.keys(HERBS).filter(function(id){return HERBS[id].t===t;}));
 
-/* ---------- 丹药：12 系 × 10 品阶 × 3 品质 = 360 种（另有原版 9 种） ---------- */
-const PILL_VARS=[{s:'',m:1},{s:'上品',m:1.8},{s:'极品',m:3.2}];
+/* ---------- 丹药：12 系 × 10 品阶 × 5 品质 = 600 种（另有原版 9 种） ---------- */
+const PILL_VARS=[{s:'',m:1},{s:'上品',m:1.8},{s:'极品',m:3.2},{s:'绝品',m:6},{s:'仙品',m:12}];
 const PILL_FAMS=[
  {base:'回气丹',f:'heal', d:function(t){return '战斗中服用：恢复气血 '+Math.round(Math.min(95,40+6*t))+'%起（随品质提升）。';}},
  {base:'聚灵丹',f:'qpsb', d:function(t){return '服用后五分钟内修炼速度 +'+(15*t)+'%起（随品质提升）。';}},
@@ -240,20 +250,20 @@ const PILL_FAMS=[
  {base:'凝神丹',f:'def', d:function(t){return '永久防御 +'+(1+0.4*t).toFixed(1)+'%起。';}},
 ];
 (function(){
-  for(let fi=0;fi<PILL_FAMS.length;fi++)for(let t=1;t<=10;t++)for(let v=0;v<3;v++){
+  for(let fi=0;fi<PILL_FAMS.length;fi++)for(let t=1;t<=10;t++)for(let v=0;v<PILL_VARS.length;v++){
     const F=PILL_FAMS[fi],V=PILL_VARS[v];
     PILLS['g'+fi+'_'+t+'_'+v]={n:V.s+F.base,f:F.f,t:t,m:V.m,d:F.d(t)};
   }
 })();
 
-/* ---------- 丹方（共 369 张：境界 + 位阶 双重解锁） ---------- */
+/* ---------- 丹方（共 609 张：境界 + 位阶 双重解锁） ---------- */
 (function(){
-  for(let fi=0;fi<PILL_FAMS.length;fi++)for(let t=1;t<=10;t++)for(let v=0;v<3;v++){
+  for(let fi=0;fi<PILL_FAMS.length;fi++)for(let t=1;t<=10;t++)for(let v=0;v<PILL_VARS.length;v++){
     const pid='g'+fi+'_'+t+'_'+v;
     const matsGE=t>1?[{t:t-1,n:2+v},{t:t,n:1+v}]:[{t:1,n:3+v}];
     RECIPES.push({id:'r_'+pid,out:pid,
       rank:Math.min(9,Math.max(0,Math.floor((t-1)*1.05+v*0.5))),
-      reqR:Math.max(0,(t-1)*2+v),
+      reqR:Math.min(21,Math.max(0,(t-1)*2+v)),
       matsGE:matsGE,shouhe:t>1?Math.ceil(t/2)+v:0});
   }
 })();
@@ -288,4 +298,90 @@ function pillPrice(pid,r){
   const p=PILLS[pid];
   if(p&&p.m!==undefined)return Math.floor(30*Math.pow(1.75,p.t)*p.m*Math.pow(1.35,r));
   return Math.floor((PILL_BASE_PRICE[pid]||50)*Math.pow(1.4,r));
+}
+
+/* ============================================================
+ * 九星塔 · 功法 · 妖兽词缀 · 成就 · 每日悬赏
+ * ============================================================ */
+
+/* ---------- 功法（九星塔里程碑层掉落，同时只能装备一部） ---------- */
+const GONGFAS=[
+ {id:'gf1', name:'长春功',   floor:5,  fx:{qps:0.10},          d:'生生不息：修炼速度 +10%。'},
+ {id:'gf2', name:'玄元诀',   floor:10, fx:{cap:0.15},          d:'玄元聚气：每日修为上限 +15%。'},
+ {id:'gf3', name:'磐石功',   floor:15, fx:{def:0.15,hp:0.15},  d:'不动如山：防御、气血 +15%。'},
+ {id:'gf4', name:'裂石掌',   floor:20, fx:{atk:0.15},          d:'掌裂顽石：攻击 +15%。'},
+ {id:'gf5', name:'聚灵功',   floor:30, fx:{qps:0.25,cap:0.10}, d:'聚灵成海：修炼速度 +25%、每日修为上限 +10%。'},
+ {id:'gf6', name:'寻宝诀',   floor:40, fx:{drop:0.30},         d:'觅宝有术：战斗与采药掉落 +30%。'},
+ {id:'gf7', name:'丹心诀',   floor:50, fx:{craft:0.10,gain:0.20}, d:'丹心通明：炼丹成功率 +10%、战斗采药所得 +20%。'},
+ {id:'gf8', name:'周天功',   floor:60, fx:{ap:2,cap:0.20},     d:'周天运转：每日行动点 +2、每日修为上限 +20%。'},
+ {id:'gf9', name:'霸体经',   floor:80, fx:{atk:0.30,def:0.30,hp:0.30}, d:'霸体初成：攻、防、气血 +30%。'},
+ {id:'gf10',name:'九星真经', floor:100,fx:{all:0.25,qps:0.30}, d:'九星真传：全属性 +25%、修炼速度 +30%。'},
+];
+
+/* ---------- 九星塔 ---------- */
+const AP_TOWER=2;          // 每次登塔消耗行动点
+const TOWER_BOSS_EVERY=10; // 每 10 层一头守塔妖王
+const TOWER_MUL=1.06;      // 每层强度系数
+
+/* ---------- 妖兽词缀（精英化：更强、掉落更丰） ---------- */
+const AFFIXES=[
+ {id:'kuangbao',n:'狂暴',atk:1.4, d:'攻势狂暴：攻击 +40%。'},
+ {id:'jianjia', n:'坚甲',def:1.8,hp:1.2, d:'甲坚难摧：防御 +80%、气血 +20%。'},
+ {id:'shixue',  n:'嗜血',atk:1.15,hp:1.3,leech:0.3, d:'嗜饮精血：攻击吸血 30%。'},
+ {id:'lingti',  n:'灵体',hp:1.8, d:'灵气凝体：气血 +80%。'},
+ {id:'hudun',   n:'护盾',shield:0.5, d:'灵光护体：开场护盾（最大气血的 50%）。'},
+ {id:'xunjie',  n:'迅捷',atk:1.2,dodge:0.15, d:'身形如电：闪避 +15%、攻击 +20%。'},
+];
+
+/* ---------- 成就（checkAch 按条件类型自动结算；领奖后记入 S.ach） ---------- */
+const ACHS=[
+ {id:'a_g1',   n:'踏入修行', kind:'g',   v:1,   rw:{stones:200},            d:'突破至第 1 层。'},
+ {id:'a_g13',  n:'凝而为一', kind:'g',   v:13,  rw:{stones:800},            d:'修满第一个大境界。'},
+ {id:'a_g65',  n:'脱胎换骨', kind:'g',   v:65,  rw:{stones:5000},           d:'踏入先天之境。'},
+ {id:'a_g117', n:'神游物外', kind:'g',   v:117, rw:{stones:3e4},            d:'修至化神境。'},
+ {id:'a_g156', n:'融天蜕凡', kind:'g',   v:156, rw:{stones:12e4},           d:'修至融天境。'},
+ {id:'a_g208', n:'仙王临世', kind:'g',   v:208, rw:{stones:60e4},           d:'修至仙王境。'},
+ {id:'a_g285', n:'九星霸体', kind:'g',   v:285, rw:{stones:300e4,ap:20},    d:'登临人皇之境。'},
+ {id:'a_k100', n:'初露锋芒', kind:'kills',v:100, rw:{stones:600},            d:'累计击杀 100 名敌人。'},
+ {id:'a_k1k',  n:'百战之士', kind:'kills',v:1000,rw:{stones:8000,pill:'g0_5_1'}, d:'累计击杀 1000 名敌人。'},
+ {id:'a_k5k',  n:'杀伐果断', kind:'kills',v:5000,rw:{stones:4e4,pill:'g0_8_1'},  d:'累计击杀 5000 名敌人。'},
+ {id:'a_boss50',n:'猎首者',  kind:'bosses',v:50, rw:{stones:1e4},            d:'累计击杀 50 名首领。'},
+ {id:'a_boss300',n:'屠龙者', kind:'bosses',v:300,rw:{stones:8e4,pill:'g4_5_1'}, d:'累计击杀 300 名首领。'},
+ {id:'a_c100', n:'丹道入门', kind:'crafts',v:100, rw:{stones:1500},           d:'累计炼丹 100 炉。'},
+ {id:'a_c1k',  n:'丹道大宗师',kind:'crafts',v:1000,rw:{stones:2e4,pill:'g3_5_1'}, d:'累计炼丹 1000 炉。'},
+ {id:'a_e200', n:'采药人',   kind:'explores',v:200,rw:{stones:1500},          d:'累计采药 200 次。'},
+ {id:'a_e1k',  n:'尝遍百草', kind:'explores',v:1000,rw:{stones:2e4},           d:'累计采药 1000 次。'},
+ {id:'a_eat100',n:'服食有道',kind:'eats', v:100, rw:{stones:3000},           d:'服食灵植 100 株。'},
+ {id:'a_s3',   n:'星火初燃', kind:'stars',v:3,   rw:{stones:5000},           d:'开启三处星秘藏。'},
+ {id:'a_s6',   n:'星河在体', kind:'stars',v:6,   rw:{stones:6e4},            d:'开启六处星秘藏。'},
+ {id:'a_s9',   n:'九星归位', kind:'stars',v:9,   rw:{stones:100e4,ap:15},    d:'开启全部九处星秘藏。'},
+ {id:'a_t10',  n:'登塔先锋', kind:'tower',v:10,  rw:{stones:2000},           d:'九星塔到达 10 层。'},
+ {id:'a_t30',  n:'层层而上', kind:'tower',v:30,  rw:{stones:2e4},            d:'九星塔到达 30 层。'},
+ {id:'a_t60',  n:'塔中称尊', kind:'tower',v:60,  rw:{stones:10e4},           d:'九星塔到达 60 层。'},
+ {id:'a_t100', n:'九天之上', kind:'tower',v:100, rw:{stones:50e4,ap:10},     d:'九星塔到达 100 层。'},
+ {id:'a_bone', n:'全祭之骨', kind:'bones',v:31,  rw:{stones:2e4},            d:'锻骨境祭炼至全祭 31 根。'},
+ {id:'a_dan9', n:'丹帝之尊', kind:'danExp',v:250000,rw:{stones:20e4},         d:'丹修阅历达 25 万。'},
+ {id:'a_day30',n:'修行一月', kind:'days', v:30,  rw:{stones:5000},           d:'度过 30 日。'},
+ {id:'a_day100',n:'百日筑基', kind:'days',v:100, rw:{stones:3e4},            d:'度过 100 日。'},
+ {id:'a_q1k',  n:'日进斗金', kind:'qiTotal',v:100000,rw:{stones:1e4},         d:'累计获得修为 10 万。'},
+ {id:'a_q1m',  n:'修为等身', kind:'qiTotal',v:1e6, rw:{stones:10e4},           d:'累计获得修为 100 万。'},
+];
+
+/* ---------- 每日悬赏（按天数确定性生成 3 条，次日刷新） ---------- */
+const DAILY_TYPES=[
+ {k:'kill',   n:'除魔', txt:function(v){return '击杀 '+v+' 名妖敌';}},
+ {k:'boss',   n:'猎首', txt:function(v){return '击杀 '+v+' 名首领';}},
+ {k:'explore',n:'采药', txt:function(v){return '采药 '+v+' 次';}},
+ {k:'craft',  n:'炼丹', txt:function(v){return '炼丹 '+v+' 炉';}},
+ {k:'eat',    n:'服食', txt:function(v){return '服食灵植 '+v+' 株';}},
+ {k:'sell',   n:'售货', txt:function(v){return '向商行出售 '+v+' 次';}},
+ {k:'tower',  n:'闯塔', txt:function(v){return '挑战九星塔 '+v+' 次';}},
+];
+function dailyCount(k,r){ // 悬赏目标数量（随境界微增）
+  const base={kill:8,boss:2,explore:6,craft:5,eat:5,sell:4,tower:3}[k]||5;
+  return base+Math.floor(r/2);
+}
+function dailyReward(k,r){ // 灵石奖励
+  const mul={boss:1.6,tower:1.4}[k]||1;
+  return Math.floor((200+r*260)*mul);
 }

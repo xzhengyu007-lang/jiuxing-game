@@ -15,6 +15,8 @@ for(const k in sandbox)globalThis[k]=sandbox[k];
 const code=fs.readFileSync(path.join(__dirname,'..','js','data.js'),'utf8')+'\n'
           +fs.readFileSync(path.join(__dirname,'..','js','game.js'),'utf8')+'\n';
 const probe=`
+Math.random=()=>0.5; // 固定随机：词缀必不出现（0.5>0.16），掉落与伤害确定
+
 function simFight(zid,ei){
   S.ap=999999;
   startBattle(zid,ei);
@@ -62,6 +64,20 @@ for(let r=0;r<REALMS.length;r++){
   const res=simFight(gz.id,2);
   const en=gz.enemies[2];
   console.log((res.win?'胜':'败')+'  '+REALMS[r].name+'七层满配 vs '+gz.name+'·'+en.n+'（'+res.turns+'回合）');
+}
+
+console.log('--- 九星塔（满配·各档层） ---');
+function simTower(f){
+  S.ap=999;S.towerBest=f-1;
+  startTower();
+  let n=0;
+  while(B&&!B.over&&n++<400)useSkill('bati');
+  const win=B.ehp<=0;B=null;return{win:win,turns:n};
+}
+for(const f of [5,10,20,30,50,80,120]){
+  stateAt(Math.min(21,Math.floor((f-1)/5)),6,true);
+  const res=simTower(f);
+  console.log((res.win?'胜':'败')+'  满配 vs 塔第 '+f+' 层（'+res.turns+'回合）');
 }
 `;
 fs.writeFileSync(path.join(__dirname,'balance_probe.js'),code+probe);

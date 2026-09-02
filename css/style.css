@@ -228,3 +228,9 @@ details.zgrp summary::after{content:' ▾';opacity:.7}
 details.zgrp[open] summary::after{content:' ▴'}
 details.zgrp summary:hover{background:rgba(255,255,255,.05)}
 details.zgrp > *:not(summary){margin:0 10px 10px}
+
+/* ---------- 九星塔 / 妖兽词缀 / 每日悬赏 ---------- */
+.afx{color:#e08a3c;border:1px solid rgba(224,138,60,.55);border-radius:4px;padding:0 4px;font-size:10px;margin-left:6px;white-space:nowrap}
+.bar.slim{height:14px;border-radius:7px}
+.bar.slim>i{border-radius:7px}
+.bar.slim span{font-size:10px;line-height:14px}

@@ -297,7 +297,91 @@ curTab='pearl';renderAll();
 curTab='bag';renderAll();
 renderAlchList();renderBagList();
 
-console.log('✅ 冒烟测试全部通过：22境×13层全流程 / 45地图战斗 / 千灵植 / 369丹方 / 丹药12家族 / 服食·整批出售 / 日程 / 混沌珠 / 华云商行 / 存档迁移');
+/* ========== 阶段四：每日修为上限 / 九星塔 / 功法 / 词缀 / 成就 / 悬赏 ========== */
+S=newState();
+/* —— 每日修为上限 —— */
+const cap0=qiCap();
+assert(cap0>0,'每日修为上限应为正: '+cap0);
+const mq0=S.qi;
+addQi(cap0*10,'test');
+assert(S.qi-mq0===cap0,'超限时只应获得上限值');
+assert(S.qiToday===cap0,'今日修为应等于上限');
+assert(addQi(100,'test')===0,'满上限后不应再增长');
+assert(qiLeft()===0,'余量应为0');
+S.qiToday=0;S.flags.qiCapped=0;
+/* —— 九星塔 / 功法 —— */
+S.ap=999;
+const tb0=S.towerBest||0;
+for(let f=tb0+1;f<=6;f++){
+  startTower();
+  assert(B&&B.tower===f,'塔层应递进到 '+f);
+  assert(B.e.noAfx,'塔怪不携带词缀');
+  B.ehp=1;useSkill('bati');
+  assert(B.over,'塔战应结束');
+}
+assert(S.towerBest===6,'应登至第6层');
+assert(S.gf.own.gf1===1,'第5层应掉落长春功');
+assert(S.gf.on==='gf1','通关里程碑应自动运功');
+const qpsOn=qps();
+S.gf.on=null;
+assert(qps()<qpsOn,'收功后修炼速度应下降');
+equipGf('gf1');
+assert(S.gf.on==='gf1','应可重新运功');
+
+/* —— 妖兽词缀 —— */
+const rr=Math.random;Math.random=()=>0.01; // 必出词缀且恒为狂暴
+startBattle('fengming',0,true);
+assert(B.afx&&B.afx.id==='kuangbao','固定随机应出狂暴词缀');
+B.ehp=1;useSkill('bati');
+assert(B.over,'词缀怪应可正常击杀');
+Math.random=rr;
+/* —— 每日悬赏 —— */
+ensureDaily();
+assert(S.daily.qs.length===3,'应生成3条悬赏');
+assert(S.daily.day===S.day,'悬赏日期应吻合');
+const qsA=S.daily.qs.slice();
+S.daily={day:0,qs:[],prog:[],done:[]};
+ensureDaily();
+assert(JSON.stringify(qsA)===JSON.stringify(S.daily.qs),'同日悬赏应确定不变');
+if(S.daily.qs.map(q=>DAILY_TYPES[q].k).indexOf('kill')<0){
+  S.daily.qs[0]=0;S.daily.prog[0]=0;S.daily.done[0]=0;
+  S.daily.cnt[0]=dailyCount('kill',curR());S.daily.rw[0]=dailyReward('kill',curR());
+}
+const sd0=S.stones;
+bumpDaily('kill',dailyCount('kill',curR()));
+assert(S.stones>sd0,'完成悬赏应得灵石');
+/* —— 成就 —— */
+S.stat.kills=100;
+checkAch();
+assert(S.ach.a_k100===1,'击杀100成就应达成');
+assert(S.stat.qiTotal>0,'累计修为应已统计');
+assert(ACHS.length>=25,'成就应至少25条');
+
+/* —— 装备强化 / 灵兽升级 / 图鉴 —— */
+S.stones=1e9;
+upgradeEq();
+assert(S.eqLv===1,'强化应至+1');
+assert(upEqCost()===4200,'强化费用应递增');
+S.pearl.beasts=[{t:'fengqun',lv:1}];
+const fid=HERBS_BY_TIER[1][0];
+S.herbs[fid]=10;
+feedBeast(0,fid);
+assert(S.pearl.beasts[0].lv===2,'喂养应升到2阶');
+assert(Object.keys(S.seen.h).length>0,'图鉴应有灵植收录');
+/* —— 渲染冒烟：新页签 —— */
+curTab='tower';renderAll();
+curTab='codex';renderAll();
+curTab='cult';renderAll();
+curTab='bag';renderAll();
+/* —— 次日重置 —— */
+const yd=S.day;
+nextDay();
+assert(S.day===yd+1,'应进入次日');
+assert(S.qiToday===0,'次日今日修为应清零');
+assert(S.daily.day===S.day,'次日悬赏应换榜');
+assert(S.ap===apMax(curR()),'次日行动点应回满');
+assert(qiCap()>0,'次日上限应恢复可用');
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 千灵植 / 609丹方 / 每日修为上限 / 九星塔·功法 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
