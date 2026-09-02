@@ -1,5 +1,5 @@
 /* 九星霸体诀 · Service Worker：离线缓存（游戏为纯静态，可整站离线） */
-const CACHE = 'jsxing-v4';
+const CACHE = 'jsxing-v5';
 const ASSETS = [
   './',
   './index.html',

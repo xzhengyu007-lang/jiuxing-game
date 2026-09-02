@@ -76,8 +76,8 @@ const exp0=S.danExp;
 for(let i=0;i<30;i++)craft('huiqi');
 assert(S.danExp>exp0,'炼丹应获得阅历');
 assert((S.pills.huiqi||0)>0,'应有丹药产出');
-S.stones=1e9;S.qi=1e60;
-for(let i=0;i<9;i++){S.pills['star'+i+'_0']=1;condenseStar(i);}
+S.stones=1e12;S.qi=1e60;
+for(let i=0;i<9;i++){S.pills['star'+i+'_5']=15;autoCondense(i);}
 assert(starCnt()===9,'九星应全部开启, 实际 '+starCnt());
 Math.random=realRandom;
 
@@ -321,12 +321,13 @@ for(let f=tb0+1;f<=6;f++){
 }
 assert(S.towerBest===6,'应登至第6层');
 assert(S.gf.own.gf1===1,'第5层应掉落长春功');
-assert(S.gf.on==='gf1','通关里程碑应自动运功');
+assert(S.gf.on.indexOf('gf1')>=0,'通关里程碑应自动运功');
 const qpsOn=qps();
-S.gf.on=null;
+S.gf.on=[];
 assert(qps()<qpsOn,'收功后修炼速度应下降');
 equipGf('gf1');
-assert(S.gf.on==='gf1','应可重新运功');
+assert(S.gf.on.indexOf('gf1')>=0,'应可重新运功');
+assert(gfSlots()===1+Math.floor(curR()/4),'运功槽数应随境界增长');
 
 /* —— 妖兽词缀 —— */
 const rr=Math.random;Math.random=()=>0.01; // 必出词缀且恒为狂暴
@@ -381,42 +382,103 @@ assert(S.qiToday===0,'次日今日修为应清零');
 assert(S.daily.day===S.day,'次日悬赏应换榜');
 assert(S.ap===apMax(curR()),'次日行动点应回满');
 assert(qiCap()>0,'次日上限应恢复可用');
-/* ========== 阶段五：凝星丹与凝星十三重 ========== */
+/* ========== 阶段五：凝星丹力模型 / 货币与飞升 / 武功阁 ========== */
 assert(Object.keys(PILLS).filter(k=>PILLS[k].f==='star').length===54,'凝星丹应有54枚');
 assert(STAR_STAGES.length===13,'凝星应十三重');
-for(let q=0;q<STAR_PILL_Q.length;q++)assert(STAR_PILL_Q[q].p===q+1,'品阶进度应递增: '+q);
+assert(STAR_PILL_Q.length===6,'星丹应六等品阶');
+assert(STAR_PILL_Q[5].pw===1024,'巨丹丹力应为1024');
+assert(pillPow(0,0)===1&&pillPow(8,5)===5120,'星丹丹力应随星阶增强');
+assert(starNeed(0,0)===10,'星0一重需10丹力');
+assert(starNeed(8,0)>starNeed(0,0)*100,'星间需求应数千倍拉开');
+assert(starNeed(0,12)>starNeed(0,0)*100,'每重需求应递增');
+assert(SKILLS.length>=210,'战技应至少210式, 实际 '+SKILLS.length);
+assert(GONGFAS.length>=212,'功法应至少212部, 实际 '+GONGFAS.length);
+assert(SKILLS.filter(s=>s.src==='quest').length===8,'剧情战技应8式（开天七式+灭世火莲）');
+assert(GONGFAS.filter(g=>g.src==='quest').length===3,'大梵天经应三卷');
 assert(RECIPES.length===618,'丹方应618张, 实际 '+RECIPES.length);
+/* —— 批量炼丹 —— */
+S=newState();
+S.herbs.lingcao=3000;S.danExp=1e9;S.ap=50;
+craft('huiqi',100);
+assert((S.pills.huiqi||0)>=1,'批量炼丹应有产出');
+assert(S.ap===49,'一批炼丹只应耗1行动点, 实际 '+S.ap);
+assert(S.stat.crafts>=100,'批量炼丹应按炉计数');
+/* —— 凝星：星丹化丹力，海量丹药跨重 —— */
 S=newState();
 S.g=LAYER_CNT; // 凝血一层，风府星可凝
 S.stones=1e12;S.qi=1e60;S.ap=999;S.danExp=1e9;
-S.herbs[HERBS_BY_TIER[1][0]]=99;S.herbs[HERBS_BY_TIER[2][0]]=99;S.mats.shouhe=99;
+S.herbs[HERBS_BY_TIER[1][0]]=9999;S.herbs[HERBS_BY_TIER[2][0]]=9999;S.mats.shouhe=9999;
 const rrr=Math.random;Math.random=()=>0.001; // 必成丹且必出巨丹
 craft('r_star0');
 assert((S.pills.star0_5||0)===1,'固定随机应出巨丹');
 usePill('star0_5');
 assert((S.pills.star0_5||0)===1,'凝星丹不可直接服用');
 condenseStar(0,5);
-assert(S.starLv[0]===6&&starCnt()===1,'巨丹应+6重, 实际 '+S.starLv[0]);
-assert((S.pills.star0_5||0)===0,'凝星应消耗星丹');
+assert(starLvOf(0)===9,'一枚巨丹应凭丹力凝至9重, 实际 '+starLvOf(0));
+assert(starCnt()===1,'凝星应开星');
+assert((S.starPow[0]-(S.starUsed[0]||0))>0,'丹力应有结转');
 condenseStar(1,0);
 assert(!S.starLv[1],'未依序凝聚应被拒');
-S.pills.star0_5=2;S.pills.star0_0=1;
+S.pills.star0_5=2;
+condenseStar(0,5);condenseStar(0,5); // 每次喂一枚，两枚巨丹跨三重
+assert(starLvOf(0)===12,'应凝至12重, 实际 '+starLvOf(0));
+S.pills.star0_5=3;
 condenseStar(0,5);
-assert(S.starLv[0]===12,'应凝至12重, 实际 '+S.starLv[0]);
-condenseStar(0,0);
-assert(S.starLv[0]===13,'应凝至13重, 实际 '+S.starLv[0]);
+assert(starLvOf(0)===13,'应凝至13重星汉圆满, 实际 '+starLvOf(0));
 assert(Math.abs(starFx('qps')-0.5)<1e-9,'十三重神通应翻倍');
-S.g=11*LAYER_CNT;
-for(let i=1;i<9;i++){S.pills['star'+i+'_0']=1;condenseStar(i,0);}
-assert(starCnt()===9,'九星应全部凝聚');
+S.g=2*LAYER_CNT; // 玉衡星需辟海境
+S.pills.star1_5=10;
+autoCondense(1);
+assert(starLvOf(1)===13,'一键凝聚应至星汉圆满, 实际 '+starLvOf(1));
+Math.random=rrr;
+S.g=11*LAYER_CNT;S.ap=999;
+for(let i=2;i<9;i++){S.pills['star'+i+'_5']=15;autoCondense(i);}
+assert(starCnt()===9,'九星应全部凝聚, 实际 '+starCnt());
 checkAch();
 assert(S.ach.a_st13===1,'星汉圆满成就应达成');
 assert(S.ach.a_st9===1,'凝星九重成就应达成');
-Math.random=rrr;
+/* —— 货币与飞升 —— */
+S.stones=5e7;
+assert(moneyName()==='灵石','凡界应以灵石通行');
+assert(fmtMoney(5e7).indexOf('上品')>=0,'大额灵石应显示上品');
+assert(fmtMoney(500)==='500灵石','小额灵石应显示下品');
+S.g=13*LAYER_CNT; // 蜕凡入仙
+ascendNow();
+assert(S.flags.ascend===1,'飞升标记应置位');
+assert(S.stones===5000,'飞升应万灵石折一仙石, 实际 '+S.stones);
+assert(isXian()&&moneyName()==='仙石','入仙界后应以仙石通行');
+assert(fmtMoney(50000)==='50中品仙石','仙石亦分下中上极品');
+/* —— 武功阁：战技栏 / 功法多槽 / 购买 —— */
+S.stones=1e12;
+grantSkill('kaitian1');
+assert(S.sk.own.kaitian1===1&&S.sk.load.indexOf('kaitian1')>=0,'剧情战技应入栏');
+grantGf('dafu1');
+assert(S.gf.own.dafu1===1&&S.gf.on.indexOf('dafu1')>=0,'大梵天经应自动运功');
+assert(gfFx('qps')>0,'功法加成应生效');
+equipGf('dafu1');
+assert(S.gf.on.indexOf('dafu1')<0,'应可收功');
+equipGf('dafu1');
+assert(S.gf.on.indexOf('dafu1')>=0,'应可重新运功');
+const skBuy=SKILLS.filter(s=>s.src==='ge'&&s.req.realm<=curR()).sort((a,b)=>skillPrice(a)-skillPrice(b))[0];
+buySkill(skBuy.id);
+assert(S.sk.own[skBuy.id]===1,'应可购得传功阁战技: '+skBuy.id);
+const gfBuy=GONGFAS.filter(g=>g.price&&g.reqR<=curR()).sort((a,b)=>a.price-b.price)[0];
+buyGf(gfBuy.id);
+assert(S.gf.own[gfBuy.id]===1,'应可购得传功阁功法: '+gfBuy.id);
+checkQuests();
+assert(S.quests.kaitian1===1&&S.quests.dafu1===1,'剧情任务应结算');
+assert(QUESTS.length>=28,'剧情应至少28段, 实际 '+QUESTS.length);
+startBattle('fengming',0);
+let kn=0;
+while(B&&!B.over&&kn++<500)useSkill('kaitian1');
+assert(B&&B.over,'开天第一式应可胜野怪');
+B=null;
+curTab='wugong';renderAll();
 curTab='stars';renderAll();
 curTab='alchemy';renderAll();
 curTab='codex';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹·成星进度 / 九星塔·功法 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
+curTab='realms';renderAll();
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·212功法·武功阁 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
