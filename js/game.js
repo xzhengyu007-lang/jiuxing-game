@@ -49,6 +49,7 @@ function newState(){
     sk:{own:{},load:['bati']},
     sect:{rank:108,contrib:0,title:0,wins:0,spars:0,day:0,qs:[],prog:[],done:[],cnt:[],rw:[]},
     body:{li:0,lv:[0,0,0,0,0,0,0,0,0]},
+    soc:{roster:[],dualBoost:0}, gifts:{},
   };
 }
 function save(){ if(!S)return; S.lastTick=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
@@ -154,7 +155,7 @@ function buffMult(){
   m*=qbuff;
   m*=1+0.03*S.xiusui;
   m*=1+S.flags.sijie;
-  m*=1+starFx('qps')+gfFx('qps')+sectFx('qps')+sectTitleFx('qps');
+  m*=1+starFx('qps')+gfFx('qps')+sectFx('qps')+sectTitleFx('qps')+npcFx('qps');
   return m;
 }
 function qps(){ // 每秒灵气
@@ -180,7 +181,7 @@ function heroStats(){
     atk*=e.atk||1;def*=e.def||1;hp*=e.hp||1;
   }
   if(S.flags.fireSeed)atk*=1.15;
-  const sAll=1+starFx('all')+gfFx('all')+sectFx('all');
+  const sAll=1+starFx('all')+gfFx('all')+sectFx('all')+npcFx('all');
   atk*=sAll*(1+starFx('atk')+gfFx('atk'))*(1+bodyFx('atk'));
   def*=sAll*(1+starFx('def')+gfFx('def'))*(1+bodyFx('def'));
   hp*=sAll*(1+starFx('hp')+gfFx('hp'))*(1+bodyFx('hp'));
@@ -619,6 +620,10 @@ function usePill(pid){
       S.pills[pid]--;
       log('good',p.n+'化作磅礴灵气：修为 +'+fmt(got)+'。');break;
     }
+    case 'dual':{
+      S.pills[pid]--;S.soc.dualBoost=S.day+1;
+      log('good',p.n+'化开，周身如沐春风——明日双修之效大增（1.5 倍）。');break;
+    }
     case 'danxp':{
       S.pills[pid]--;S.danExp+=(15+25*t)*m;
       log('good',p.n+'启灵开智：丹修阅历 +'+fmt((15+25*t)*m)+'。');break;
@@ -716,7 +721,7 @@ function startBattle(zid,idx,free){
 }
 function rollAffix(ed){
   if(ed.noAfx)return null;
-  const ch=0.16+0.1*(starFx('drop')+gfFx('drop')+sectFx('drop')+sectTitleFx('drop'));
+  const ch=0.16+0.1*(starFx('drop')+gfFx('drop')+sectFx('drop')+sectTitleFx('drop')+npcFx('drop'));
   if(ed.boss||Math.random()>=ch)return null;
   return AFFIXES[Math.floor(Math.random()*AFFIXES.length)];
 }
@@ -849,14 +854,15 @@ function winBattle(){
   B.over=true;
   const ed=B.e;
   const z=ZONES.find(x=>x.id===B.zid);
-  const dropMul=1+(starFx('drop')+gfFx('drop')+sectFx('drop')+sectTitleFx('drop'))+(B.afx?0.4:0);
-  const gainMul=1+starFx('gain')+gfFx('gain')+sectFx('gain');
+  const dropMul=1+(starFx('drop')+gfFx('drop')+sectFx('drop')+sectTitleFx('drop')+npcFx('drop'))+(B.afx?0.4:0);
+  const gainMul=1+starFx('gain')+gfFx('gain')+sectFx('gain')+npcFx('gain');
   const stones=Math.floor(30*Math.pow(1.55,ed.r)*ed.m*rnd(0.8,1.3)*(ed.boss?3:1)*dropMul*(B.tower?1.5:1));
   S.stones+=stones;
   let drops=moneyName()+' x'+fmtMoney(stones);
   if(ed.r>=2&&Math.random()<Math.min(0.95,0.55*dropMul)){S.mats.shouhe=(S.mats.shouhe||0)+1;drops+='，兽核 x1';}
+  drops+=dropLoot(ed,dropMul);
   if(Math.random()<Math.min(0.95,0.35*dropMul)){
-    const h=z?dropHerb(z):randHerbTier(Math.max(1,ed.r-1),Math.min(10,ed.r+1));
+    const h=z?dropHerb(z):randHerbTier(Math.max(1,ed.r-1),Math.min(12,ed.r+1));
     S.herbs[h]=(S.herbs[h]||0)+1;drops+='，'+HERBS[h].n+' x1';
   }
   const qiGain=addQi(layerCost()*(0.05+0.02*ed.m)*(ed.boss?2.5:1)*gainMul,'battle');
@@ -883,6 +889,7 @@ function winBattle(){
   }else{
     const key=B.zid+':'+B.idx;
     S.kills[key]=(S.kills[key]||0)+1;
+    maybeMeet('battle',ZONES.find(function(x){return x.id===B.zid;})?ZONES.find(function(x){return x.id===B.zid;}).name:'');
   }
   if(ed.final){
     S.flags.won=1;
@@ -940,6 +947,7 @@ function explore(zid){
   bumpDaily('explore',1);bumpSect('explore',1);
   log('good','在【'+z.name+'】采到 '+HERBS[h].n+' x'+n+'，顺手得了些灵石（'+fmt(st)+'）'+(eq>0?('，气机微动，修为 +'+fmt(eq)):'')+'。');
   if(Math.random()<0.14)doEvent(z);
+  maybeMeet('explore',z.name);
   renderAll();save();
 }
 function doEvent(z){
@@ -1611,6 +1619,7 @@ const TABS=[
  {id:'wugong',n:'武功'},
  {id:'sect',n:'宗门'},
  {id:'body',n:'练体'},
+ {id:'soc',n:'红尘'},
  {id:'codex',n:'图鉴'},
  {id:'stars',n:'九星'},
  {id:'realms',n:'境界'},
@@ -1906,6 +1915,7 @@ function renderMarket(){
      '<button class="btn" onclick="sellHerbsTier('+t+',0)">全售</button></span></div>';
   }).join('');
   $('main').innerHTML='<div class="grid2"><div>'+
+   shop2Html()+
    '<div class="panel"><h3>华云商行 · 采购</h3>'+
    '<p class="small muted">华云商行，货通东荒。掌柜的满面堆笑：“客官里边请——今儿什么都有。”</p>'+
    shopItems.map(it=>'<div class="row-item"><div class="info"><div class="nm">'+it.n+'</div><div class="small muted">'+it.d+'</div></div>'+
@@ -1916,6 +1926,7 @@ function renderMarket(){
    (tierRows||'<p class="small muted">囊中无药材。</p>')+
    ((S.mats.shouhe||0)>0?'<div class="row-item"><div class="info"><div class="nm">兽核 x'+S.mats.shouhe+'</div><div class="small muted">收购价 '+fmtMoney(corePrice(r))+' '+moneyName()+'/枚</div></div>'+
      '<span><button class="btn ghost" onclick="sellCore(1)">售1</button> <button class="btn" onclick="sellCore('+S.mats.shouhe+')">全售</button></span></div>':'')+
+   sellMatRows()+
    (pillsOwned.length?pillsOwned.map(pid=>
      '<div class="row-item"><div class="info"><div class="nm">'+PILLS[pid].n+' x'+S.pills[pid]+'</div><div class="small muted">收购价 '+fmtMoney(pillPrice(pid,r))+' '+moneyName()+'/枚</div></div>'+
      '<button class="btn ghost" onclick="sellPill(\''+pid+'\',1)">售1</button></div>').join(''):'')+
@@ -2362,6 +2373,7 @@ function renderAll(){
   else if(curTab==='wugong')renderWugong();
   else if(curTab==='sect')renderSect();
   else if(curTab==='body')renderBody();
+  else if(curTab==='soc')renderSoc();
   else if(curTab==='codex')renderCodex();
   else if(curTab==='stars')renderStars();
   else if(curTab==='realms')renderRealms();

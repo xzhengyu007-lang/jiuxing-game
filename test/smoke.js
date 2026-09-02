@@ -14,6 +14,8 @@ const sandbox={
 };
 for(const k in sandbox)globalThis[k]=sandbox[k];
 const data=fs.readFileSync(path.join(__dirname,'..','js','data.js'),'utf8');
+const data2=fs.readFileSync(path.join(__dirname,'..','js','data2.js'),'utf8');
+const social=fs.readFileSync(path.join(__dirname,'..','js','social.js'),'utf8');
 const game=fs.readFileSync(path.join(__dirname,'..','js','game.js'),'utf8');
 const test=`
 function assert(c,msg){ if(!c) throw new Error('断言失败: '+msg); }
@@ -395,7 +397,7 @@ assert(SKILLS.length>=210,'战技应至少210式, 实际 '+SKILLS.length);
 assert(GONGFAS.length>=212,'功法应至少212部, 实际 '+GONGFAS.length);
 assert(SKILLS.filter(s=>s.src==='quest').length===8,'剧情战技应8式（开天七式+灭世火莲）');
 assert(GONGFAS.filter(g=>g.src==='quest').length===3,'大梵天经应三卷');
-assert(RECIPES.length===618,'丹方应618张, 实际 '+RECIPES.length);
+assert(RECIPES.length===627,'丹方应627张, 实际 '+RECIPES.length);
 /* —— 批量炼丹 —— */
 S=newState();
 S.herbs.lingcao=3000;S.danExp=1e9;S.ap=50;
@@ -570,11 +572,77 @@ checkAch();
 assert(S.ach.a_body===1,'肉身九秘成就应达成');
 curTab='body';renderAll();
 curTab='wugong';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
+/* ========== 阶段八：红尘人物 / 双修 / 商行奇货 / 妖兽材料 ========== */
+assert(Object.keys(HERBS).length===2024,'应有2024种药材, 实际 '+Object.keys(HERBS).length);
+assert(HERBS_BY_TIER[11].length===1&&HERBS_BY_TIER[12].length===1,'应有11/12品仙界灵植');
+assert(Object.keys(MATS).length===11,'应有11种材料');
+assert(Object.keys(GIFT_DEFS).length===10,'应有10种赠礼');
+assert(SHOP2.length===8,'商行应8档柜台');
+assert(RECIPES.length===627,'应有627张丹方, 实际 '+RECIPES.length);
+assert(ZONES.every(z=>z.enemies.length>=5),'每图应至少5种妖兽');
+assert(ZONES.some(z=>z.enemies.some(e=>e.m>=3.0)),'名图应有守护妖王');
+/* 材料掉落 */
+S.mats={};
+for(let i=0;i<60;i++)dropLoot({r:6,boss:1},2);
+assert(Object.keys(S.mats).length>0,'战斗应掉落新材料');
+assert(MATS[Object.keys(S.mats)[0]].t<=7,'材料品档应合理');
+/* 偶遇与好感 */
+maybeMeet=function(src,z){return meetNpc('f',src,z);}; // 测试直接命中
+const rc0=S.soc.roster.length;
+maybeMeet('battle','黑风林');
+assert(S.soc.roster.length===rc0+1,'偶遇应结识1人');
+const npc=S.soc.roster[S.soc.roster.length-1],no=npcOf(npc);
+assert(!!no.name&&!!no.idt&&!!SOC_LIKE_TXT[no.like],'NPC档案应完整: '+no.name);
+const af0=npc.aff;
+socTalk(npc.seed);
+assert(npc.aff>af0,'交谈应加好感');
+const a1=npc.aff;socTalk(npc.seed);
+assert(npc.aff===a1,'每日交谈应仅一次');
+S.herbs.jiuye=(S.herbs.jiuye||0)+3;
+socGift(npc.seed,'herb');
+assert(S.herbs.jiuye===2&&npc.aff>a1,'赠礼应扣灵植加好感');
+/* 挚友交易（男） */
+meetNpc('m','explore');
+const bro=S.soc.roster[S.soc.roster.length-1];bro.aff=300;
+socFriend(bro.seed);
+assert(bro.friend===1,'应结为挚友');
+const st0b=S.stones;S.herbs.xianling=10;
+socTradeSell(bro.seed,'herb');
+assert(S.stones>st0b&&S.herbs.xianling<10,'挚友交易应得灵石');
+socTradeBuy(bro.seed);
+const stAfter=S.stones;socTradeBuy(bro.seed);
+assert(S.stones===stAfter,'珍藏每日仅一件');
+/* 道侣与双修 */
+assert(daoMax()===3,'仙界应3道侣位');
+npc.aff=700;
+socDao(npc.seed);
+assert(npc.dao===1,'应结为道侣');
+assert(npcFx('all')>0&&npcFx('qps')>0,'道侣应有随行加成');
+S.ap=9;const q0b=S.qi;
+socDual(npc.seed);
+assert(S.qi>q0b,'双修应得修为');
+assert(npc.dual===S.day,'双修应记次数');
+const q2b=S.qi;socDual(npc.seed);
+assert(S.qi===q2b,'每日双修应仅一次');
+/* 合欢露 */
+S.pills.hehuan=1;S.soc.dualBoost=0;
+usePill('hehuan');
+assert(S.soc.dualBoost===S.day+1&&S.pills.hehuan===0,'合欢露应设次日双修加成');
+/* 商行 */
+curTab='soc';renderAll();
+curTab='market';renderAll();
+const g0b=S.gifts.lingcha||0;const gb0=S.stones;
+buy2('lingcha');
+assert((S.gifts.lingcha||0)===g0b+1&&S.stones<gb0,'应购得赠礼');
+S.mats.yaodan=5;const sm0=S.stones;
+sellMat('yaodan',5);
+assert(S.stones>sm0,'应可售材料');
+curTab='soc';renderAll();
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
   for(const k in sandbox)globalThis[k]=sandbox[k];
-  fs.writeFileSync(path.join(__dirname,'combined.js'),data+'\n'+game+'\n'+test);
+  fs.writeFileSync(path.join(__dirname,'combined.js'),data+'\n'+data2+'\n'+social+'\n'+game+'\n'+test);
   require('./combined.js');
 }

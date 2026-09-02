@@ -12,8 +12,7 @@ const sandbox={
   unescape,escape,confirm:()=>false,alert(){}
 };
 for(const k in sandbox)globalThis[k]=sandbox[k];
-const code=fs.readFileSync(path.join(__dirname,'..','js','data.js'),'utf8')+'\n'
-          +fs.readFileSync(path.join(__dirname,'..','js','game.js'),'utf8')+'\n';
+const code=['data','data2','social','game'].map(f=>fs.readFileSync(path.join(__dirname,'..','js',f+'.js'),'utf8')).join('\n')+'\n';
 const probe=`
 Math.random=()=>0.5; // 固定随机：词缀必不出现（0.5>0.16），掉落与伤害确定
 
