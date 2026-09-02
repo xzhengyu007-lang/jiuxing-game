@@ -518,7 +518,7 @@ function sectDiscipleName(seed){return SECT_SURN[seed%12]+SECT_GIVEN[(seed*7)%20
 const SECT_ALIAS_A=['青枫','落霞','寒山','听雨','望岳','流云','碎石','抱朴','栖霞','洗剑','归尘','藏锋'];
 const SECT_ALIAS_B=['','峰','谷','斋','台','涧','崖','堂'];
 function sectBranchAlias(k){const s=(k*31+7)%96;return SECT_ALIAS_A[s%12]+SECT_ALIAS_B[(s*3)%8];}
-function sectEnemyR(rank){return Math.max(1,Math.min(21,Math.round(1+(108-rank)*20/107)));} // 第108分宗对手r1，第1分宗r21
+function sectEnemyR(rank){return Math.max(1,Math.min(6,Math.round(1+(108-rank)*5/107)));} // 108分宗乃第36分宗所分的最弱一脉：第108名对手凝血，第1名封顶辟海
 
 /* ---------- 每日门派任务（与悬赏并存，奖贡献） ---------- */
 const SECT_TASKS=[
@@ -549,13 +549,13 @@ const SECT_SHOP=[
 SKILLS.push(
  {id:'ss1',name:'玄天十三剑',tier:7,src:'sect',mult:260,qi:36,cd:2,req:{realm:6},
   d:'玄天道宗分宗贡献阁秘传——一剑挥出，十三重剑浪层层相叠，同境鲜有敌手。'},
- {id:'ss2',name:'玄天镇狱拳',tier:9,src:'sect',mult:5200,qi:150,cd:4,req:{realm:12},
+ {id:'ss2',name:'玄天镇狱拳',tier:9,src:'sect',mult:5200,qi:150,cd:4,req:{realm:6},
   d:'玄天镇狱堂不传之拳——拳出如狱门开阖，镇压之气自成领域。'}
 );
 GONGFAS.push(
- {id:'sg1',name:'玄天罡气诀',tier:7,src:'sect',fx:{atk:0.25,def:0.20,hp:0.20},
+ {id:'sg1',name:'玄天罡气诀',tier:7,src:'sect',reqR:1,fx:{atk:0.25,def:0.20,hp:0.20},
   d:'分宗贡献阁秘传——玄天罡气护体练力：攻击+25%、防御+20%、气血+20%。'},
- {id:'sg2',name:'玄天道经',tier:9,src:'sect',fx:{all:0.30,qps:0.45,cap:0.25},
+ {id:'sg2',name:'玄天道经',tier:9,src:'sect',reqR:6,fx:{all:0.30,qps:0.45,cap:0.25},
   d:'玄天道宗镇宗道法残卷——全属性+30%、修炼速度+45%、每日修为上限+25%。'}
 );
 

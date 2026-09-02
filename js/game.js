@@ -1073,10 +1073,10 @@ const QUESTS=[
  {id:'xiezu',name:'邪族入侵',desc:'击杀邪族裂隙的邪将，查明清剿人族的幕后黑手。',cond:()=>(S.kills['xiezu:2']||0)>0,
   reward:()=>{log('story','邪将临死狂笑：“九星传人……邪皇大人早已等你多时！”——星空古路的尽头，那道目光缓缓睁开。');}},
  {id:'final',name:'手握乾坤 · 脚踏星辰',desc:'踏上星空古路，击败九天邪皇之分身，镇世人族！',cond:()=>(S.kills['xingkong:2']||0)>0,reward:()=>{}},
- {id:'tianzong',name:'拜入玄天道宗',desc:'踏入通脉之境，赴玄天道宗入册——受命执掌最末的第108分宗。',cond:()=>curR()>=6,
+ {id:'tianzong',name:'拜入玄天道宗',desc:'踏入凝血之境，赴玄天道宗入册——被点去第36分宗辖下最末的第108分宗。',cond:()=>curR()>=1,
   reward:()=>{S.flags.tianzong=1;
     if(!S.sect)S.sect={rank:108,contrib:0,title:0,wins:0,spars:0,day:0,qs:[],prog:[],done:[],cnt:[],rw:[]};
-    log('story','玄天道宗，东荒第一大宗。执事翻遍名册，指给你最末一行：「第108分宗，主事久悬——你去。」你叩首入册，自此执掌第一百零八分宗：门派任务、同门切磋、分宗升位战，皆于宗门页行事。从最末爬到第一，一步一步来。');}},
+    log('story','玄天道宗，东荒第一大宗，下辖三十六分宗。近年香火不济，第36分宗再一分为一百零八，皆是垫底的弱旅。你入册那日，执事翻遍名册，指给你最末一行：「第108分宗，主事久悬——你去。」自此执掌第一百零八分宗：门派任务、同门切磋、分宗升位战，皆于宗门页行事。从最末爬到第一——而第一之上，还有总宗。');}},
 /* —— 凝星 · 武学 · 飞升（凡界之巅与仙界之途） —— */
  {id:'ningxing0',name:'凝星之引',desc:'炼制一枚【风府星丹】，于九星页凝聚第一处星窍（凝血境可炼）。',cond:()=>starCnt()>0,
   reward:()=>{S.stones+=1000;log('good','星窍初开，禁制松动——奖励：灵石 x1000。九星之路，始于足下。');}},
@@ -1326,7 +1326,7 @@ function startSectPromo(){ // 升位战：挑战上一名分宗守擂弟子，�
   if(S.sect.rank<=1){toast('已是玄天道宗第一分宗！');return;}
   if(!useAp(AP_BATTLE,'升位战'))return;
   const rank=S.sect.rank,r=sectEnemyR(rank-1);
-  const ed={n:sectDiscipleName(rank*13+5)+'（第'+(rank-1)+'分宗·守擂）',r:r,m:2.2+(108-rank)*0.02,boss:1};
+  const ed={n:sectDiscipleName(rank*13+5)+'（第'+(rank-1)+'分宗·守擂）',r:r,m:1.6+(108-rank)*0.022,boss:1};
   beginBattle('sect',-1,ed,0);
   B.sectMode='promo';B.sectRank=rank;
   battleLog('【分宗升位战】执事高唱：第'+rank+'分宗龙尘，挑战第'+(rank-1)+'分宗守擂弟子——胜则互换名次！','');
@@ -1335,7 +1335,7 @@ function startSectSpar(){ // 同门切磋：胜得贡献，败无损失
   if(!sectOpened())return;
   if(!useAp(1,'同门切磋'))return;
   const r=Math.max(1,Math.min(21,sectEnemyR(S.sect.rank)+(Math.random()<0.5?0:1)-1));
-  const ed={n:sectDiscipleName(S.day*17+3)+'（同门弟子）',r:r,m:1.5+0.01*(108-S.sect.rank),noAfx:1};
+  const ed={n:sectDiscipleName(S.day*17+3)+'（同门弟子）',r:r,m:1.2+0.015*(108-S.sect.rank),noAfx:1};
   beginBattle('sect',-1,ed,0);
   B.sectMode='spar';B.sectRank=S.sect.rank;
   battleLog('同门切磋——【'+ed.n+'】抱拳邀战：「点到为止，请！」','');
@@ -1349,7 +1349,8 @@ function winSectBattle(){
     log('story','【升位战胜】你击败第'+rank+'分宗守擂弟子——玄天道宗敕令：第'+rank+'分宗与第'+S.sect.rank+'分宗互换名次！如今你执掌第'+S.sect.rank+'分宗「'+sectBranchAlias(S.sect.rank)+'」（贡献 +'+c+'，'+moneyName()+' +'+fmtMoney(st)+'）。宗门气运渐盛。');
     toast('升位成功：第 '+S.sect.rank+' 分宗！','good');
     if(S.sect.rank===1){
-      log('story','一百零七战，从垫底到登顶——第108分宗的旗帜升起在玄天道宗最高处！天宗本部震动，宗主亲召：「自此，第108分宗，为天宗第一分宗。」');
+      S.flags.sectTop=1;
+      log('story','一百零七战，从垫底到登顶——第108分宗的旗帜升起在第一百零八分宗的最高处！第36分宗上下哗然：这一脉垫底的弱旅，竟先登了顶。总宗来使恰在此时下山，宣读法旨：「第108分宗主事龙尘，入总宗听旨。」——分宗之路至此走完，总宗的大门，为你而开。');
       toast('第一分宗 · 登顶！','good');
     }else if((108-S.sect.rank)%10===0){
       S.sect.contrib+=100;S.stones+=Math.floor(500*Math.pow(1.5,curR()));
@@ -2079,7 +2080,7 @@ function renderWugong(){
 function renderSect(){
   ensureSectDaily();
   if(!sectOpened()){
-    $('main').innerHTML='<div class="panel"><h3>玄天道宗 · 第108分宗</h3><p class="small muted">尚无宗门在册。踏入通脉之境（'+REALMS[6].name+'），剧情「拜入玄天道宗」开启后，你将入册执掌最末的第108分宗。</p></div>';
+    $('main').innerHTML='<div class="panel"><h3>玄天道宗 · 第108分宗</h3><p class="small muted">尚无宗门在册。踏入凝血之境（'+REALMS[1].name+'），剧情「拜入玄天道宗」开启后，你将入册执掌第36分宗辖下最末的第108分宗——这一百零八分宗是天宗最弱的一脉，第1分宗也不过辟海境。</p></div>';
     return;
   }
   const rank=S.sect.rank,prog=sectProg(),pct=Math.round(prog/107*100);
@@ -2103,7 +2104,7 @@ function renderSect(){
    '<div class="small muted">职位：<b class="gold">'+ti.n+'</b>（'+ti.d+'）｜ 生涯：升位 '+S.sect.wins+' 胜 · 切磋 '+S.sect.spars+' 场</div>'+
    '<div class="small">宗门气运：'+fxD.map(x=>'<span class="tag">'+x+'</span>').join(' ')+'</div>'+
    '<hr class="hr"><h4 class="small">升位战 <span class="small muted">（耗 2 行动点 · 挑战上一名分宗守擂弟子，胜则互换名次）</span></h4>'+
-   (rank<=1?'<p class="small gold">一百零七战功成——第108分宗，已是玄天道宗第一分宗。</p>':
+   (rank<=1?'<p class="small gold">一百零七战功成——第108分宗已是天宗第一分宗，总宗来使已至：「入总宗听旨。」（总宗篇章 · 后续开启）</p>':
     '<button class="btn big" onclick="startSectPromo()">挑战第'+(rank-1)+'分宗（守擂弟子 · '+REALMS[sectEnemyR(rank-1)].name+'）</button>')+
    '<h4 class="small" style="margin-top:8px">同门切磋 <span class="small muted">（耗 1 行动点 · 胜得贡献，败无损失）</span></h4>'+
    '<button class="btn" onclick="startSectSpar()">切磋一场</button>'+
