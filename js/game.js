@@ -47,6 +47,7 @@ function newState(){
     seen:{h:{},p:{}},
     towerBest:0, gf:{own:{},on:[]}, eqLv:0, starLv:{}, starPow:{}, starUsed:{},
     sk:{own:{},load:['bati']},
+    sect:{rank:108,contrib:0,title:0,wins:0,spars:0,day:0,qs:[],prog:[],done:[],cnt:[],rw:[]},
   };
 }
 function save(){ if(!S)return; S.lastTick=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
@@ -152,7 +153,7 @@ function buffMult(){
   m*=qbuff;
   m*=1+0.03*S.xiusui;
   m*=1+S.flags.sijie;
-  m*=1+starFx('qps')+gfFx('qps');
+  m*=1+starFx('qps')+gfFx('qps')+sectFx('qps')+sectTitleFx('qps');
   return m;
 }
 function qps(){ // 每秒灵气
@@ -178,7 +179,7 @@ function heroStats(){
     atk*=e.atk||1;def*=e.def||1;hp*=e.hp||1;
   }
   if(S.flags.fireSeed)atk*=1.15;
-  const sAll=1+starFx('all')+gfFx('all');
+  const sAll=1+starFx('all')+gfFx('all')+sectFx('all');
   atk*=sAll*(1+starFx('atk')+gfFx('atk'));
   def*=sAll*(1+starFx('def')+gfFx('def'));
   hp*=sAll*(1+starFx('hp')+gfFx('hp'));
@@ -213,7 +214,7 @@ function qiCap(){ // 每日修为上限：随境界、神树、聚灵坠、九�
   return layerCost()*Math.max(1.1,4-0.25*curR())
     *(1+0.03*livingTrees())
     *(S.wearing.acc==='julingzhui'?1.15:1)
-    *(1+starFx('cap'))*(1+gfFx('cap'));
+    *(1+starFx('cap'))*(1+gfFx('cap'))*(1+sectFx('cap'));
 }
 function qiLeft(){return Math.max(0,qiCap()-S.qiToday);}
 /* 统一灵气入口：修炼/打坐/战斗/炼丹/采药/服食/离线，皆经此并受每日上限约束 */
@@ -535,7 +536,7 @@ function craft(rid,n){ // 炼丹：n=连炼炉数（1/10/100）——材料一�
   S.danExp+=(rc.exp||10)*made;
   S.stat.crafts=(S.stat.crafts||0)+made;
   const cq=addQi(layerCost()*0.04*made,'craft');
-  bumpDaily('craft',made);
+  bumpDaily('craft',made);bumpSect('craft',made);
   if(made>0){
     const parts=Object.keys(got).map(id=>PILLS[id].n+'x'+got[id]).join('、');
     const qn=rc.starRoll!==undefined?'（星丹品阶随机，丹道越高越易出高品）':'';
@@ -704,7 +705,7 @@ function startBattle(zid,idx,free){
 }
 function rollAffix(ed){
   if(ed.noAfx)return null;
-  const ch=0.16+0.1*(starFx('drop')+gfFx('drop'));
+  const ch=0.16+0.1*(starFx('drop')+gfFx('drop')+sectFx('drop')+sectTitleFx('drop'));
   if(ed.boss||Math.random()>=ch)return null;
   return AFFIXES[Math.floor(Math.random()*AFFIXES.length)];
 }
@@ -815,8 +816,8 @@ function winBattle(){
   B.over=true;
   const ed=B.e;
   const z=ZONES.find(x=>x.id===B.zid);
-  const dropMul=1+(starFx('drop')+gfFx('drop'))+(B.afx?0.4:0);
-  const gainMul=1+starFx('gain')+gfFx('gain');
+  const dropMul=1+(starFx('drop')+gfFx('drop')+sectFx('drop')+sectTitleFx('drop'))+(B.afx?0.4:0);
+  const gainMul=1+starFx('gain')+gfFx('gain')+sectFx('gain');
   const stones=Math.floor(30*Math.pow(1.55,ed.r)*ed.m*rnd(0.8,1.3)*(ed.boss?3:1)*dropMul*(B.tower?1.5:1));
   S.stones+=stones;
   let drops=moneyName()+' x'+fmtMoney(stones);
@@ -828,10 +829,12 @@ function winBattle(){
   const qiGain=addQi(layerCost()*(0.05+0.02*ed.m)*(ed.boss?2.5:1)*gainMul,'battle');
   S.stat.kills=(S.stat.kills||0)+1;
   if(ed.boss)S.stat.bosses=(S.stat.bosses||0)+1;
-  bumpDaily('kill',1);
+  bumpDaily('kill',1);bumpSect('kill',1);
   battleLog('【'+ed.n+'】轰然倒下！获得 '+drops+(qiGain>0?('，战意化灵，修为+'+fmt(qiGain)):'')+'。','good');
   log('good','斩杀【'+ed.n+'】！'+drops);
-  if(B.zid==='tower'){
+  if(B.zid==='sect'){
+    winSectBattle();
+  }else if(B.zid==='tower'){
     const f=B.tower;
     if(f>(S.towerBest||0)){
       S.towerBest=f;
@@ -901,7 +904,7 @@ function explore(zid){
   S.stones+=st;
   const eq=addQi(layerCost()*0.02,'explore');
   S.stat.explores=(S.stat.explores||0)+1;
-  bumpDaily('explore',1);
+  bumpDaily('explore',1);bumpSect('explore',1);
   log('good','在【'+z.name+'】采到 '+HERBS[h].n+' x'+n+'，顺手得了些灵石（'+fmt(st)+'）'+(eq>0?('，气机微动，修为 +'+fmt(eq)):'')+'。');
   if(Math.random()<0.14)doEvent(z);
   renderAll();save();
@@ -1070,6 +1073,10 @@ const QUESTS=[
  {id:'xiezu',name:'邪族入侵',desc:'击杀邪族裂隙的邪将，查明清剿人族的幕后黑手。',cond:()=>(S.kills['xiezu:2']||0)>0,
   reward:()=>{log('story','邪将临死狂笑：“九星传人……邪皇大人早已等你多时！”——星空古路的尽头，那道目光缓缓睁开。');}},
  {id:'final',name:'手握乾坤 · 脚踏星辰',desc:'踏上星空古路，击败九天邪皇之分身，镇世人族！',cond:()=>(S.kills['xingkong:2']||0)>0,reward:()=>{}},
+ {id:'tianzong',name:'拜入玄天道宗',desc:'踏入通脉之境，赴玄天道宗入册——受命执掌最末的第108分宗。',cond:()=>curR()>=6,
+  reward:()=>{S.flags.tianzong=1;
+    if(!S.sect)S.sect={rank:108,contrib:0,title:0,wins:0,spars:0,day:0,qs:[],prog:[],done:[],cnt:[],rw:[]};
+    log('story','玄天道宗，东荒第一大宗。执事翻遍名册，指给你最末一行：「第108分宗，主事久悬——你去。」你叩首入册，自此执掌第一百零八分宗：门派任务、同门切磋、分宗升位战，皆于宗门页行事。从最末爬到第一，一步一步来。');}},
 /* —— 凝星 · 武学 · 飞升（凡界之巅与仙界之途） —— */
  {id:'ningxing0',name:'凝星之引',desc:'炼制一枚【风府星丹】，于九星页凝聚第一处星窍（凝血境可炼）。',cond:()=>starCnt()>0,
   reward:()=>{S.stones+=1000;log('good','星窍初开，禁制松动——奖励：灵石 x1000。九星之路，始于足下。');}},
@@ -1255,11 +1262,131 @@ function towerFloorEnemy(f){
 function startTower(){
   if(!useAp(AP_TOWER,'闯塔'))return;
   S.stat.towers=(S.stat.towers||0)+1;
-  bumpDaily('tower',1);
+  bumpDaily('tower',1);bumpSect('tower',1);
   const f=(S.towerBest||0)+1;
   const ed=towerFloorEnemy(f);
   beginBattle('tower',-1,ed,f);
   battleLog('九星塔第 '+f+' 层——【'+ed.n+'】当道，登塔！','');
+}
+
+/* ---------------- 玄天道宗 · 一百零八分宗（门派系统） ---------------- */
+function sectOpened(){return !!(S&&S.flags.tianzong);}
+function sectProg(){ // 前进度：0（第108名）… 107（第1名）
+  return sectOpened()?Math.max(0,108-(S.sect.rank||108)):0;
+}
+function sectFx(k){ // 宗门气运：名次越靠前，气运越盛（第1分宗满额）
+  if(!sectOpened())return 0;
+  const p=sectProg()/107;
+  if(k==='qps')return 0.50*p;
+  if(k==='all')return 0.25*p;
+  if(k==='cap')return 0.30*p;
+  if(k==='drop')return 0.30*p;
+  if(k==='gain')return 0.30*p;
+  return 0;
+}
+function sectTitleFx(k){ // 职位加成：每级 +4% 修炼 / +3% 掉落
+  const t=sectOpened()?((S.sect.title||0)):0;
+  if(k==='qps')return 0.04*t;
+  if(k==='drop')return 0.03*t;
+  return 0;
+}
+function ensureSectDaily(){
+  if(!S||!S.sect)return;
+  if(S.sect.day===S.day&&S.sect.qs&&S.sect.qs.length)return;
+  const r=rngFor(S.day*104729+7);
+  const idxs=[];
+  while(idxs.length<3){
+    const k=Math.floor(r()*SECT_TASKS.length)%SECT_TASKS.length;
+    if(idxs.indexOf(k)<0)idxs.push(k);
+  }
+  S.sect.day=S.day;S.sect.qs=idxs;
+  S.sect.prog=idxs.map(()=>0);S.sect.done=idxs.map(()=>0);
+  S.sect.cnt=idxs.map(i=>sectTaskCount(SECT_TASKS[i].k,curR()));
+  S.sect.rw=idxs.map(i=>sectTaskReward(curR()));
+}
+function bumpSect(k,n){
+  if(!sectOpened()||!S.sect.qs)return;
+  ensureSectDaily();
+  for(let i=0;i<S.sect.qs.length;i++){
+    if(SECT_TASKS[S.sect.qs[i]].k!==k||S.sect.done[i])continue;
+    S.sect.prog[i]=Math.min(S.sect.cnt[i],S.sect.prog[i]+(n||1));
+    if(S.sect.prog[i]>=S.sect.cnt[i]){
+      S.sect.done[i]=1;
+      const t=SECT_TASKS[S.sect.qs[i]],c=S.sect.rw[i];
+      S.sect.contrib+=c;
+      const st=Math.floor(40*Math.pow(1.5,curR()));
+      S.stones+=st;
+      log('good','【门派任务 · '+t.n+'】贡献 +'+c+'，'+moneyName()+' +'+fmtMoney(st)+'。');
+      toast('门派任务完成：'+t.n,'good');
+    }
+  }
+}
+function startSectPromo(){ // 升位战：挑战上一名分宗守擂弟子，胜则互换名次
+  if(!sectOpened())return;
+  if(S.sect.rank<=1){toast('已是玄天道宗第一分宗！');return;}
+  if(!useAp(AP_BATTLE,'升位战'))return;
+  const rank=S.sect.rank,r=sectEnemyR(rank-1);
+  const ed={n:sectDiscipleName(rank*13+5)+'（第'+(rank-1)+'分宗·守擂）',r:r,m:2.2+(108-rank)*0.02,boss:1};
+  beginBattle('sect',-1,ed,0);
+  B.sectMode='promo';B.sectRank=rank;
+  battleLog('【分宗升位战】执事高唱：第'+rank+'分宗龙尘，挑战第'+(rank-1)+'分宗守擂弟子——胜则互换名次！','');
+}
+function startSectSpar(){ // 同门切磋：胜得贡献，败无损失
+  if(!sectOpened())return;
+  if(!useAp(1,'同门切磋'))return;
+  const r=Math.max(1,Math.min(21,sectEnemyR(S.sect.rank)+(Math.random()<0.5?0:1)-1));
+  const ed={n:sectDiscipleName(S.day*17+3)+'（同门弟子）',r:r,m:1.5+0.01*(108-S.sect.rank),noAfx:1};
+  beginBattle('sect',-1,ed,0);
+  B.sectMode='spar';B.sectRank=S.sect.rank;
+  battleLog('同门切磋——【'+ed.n+'】抱拳邀战：「点到为止，请！」','');
+}
+function winSectBattle(){
+  const rank=B.sectRank,mode=B.sectMode,ed=B.e,r=ed.r;
+  if(mode==='promo'){
+    S.sect.rank=Math.max(1,rank-1);S.sect.wins++;
+    const c=40+r*15,st=Math.floor(80*Math.pow(1.5,r));
+    S.sect.contrib+=c;S.stones+=st;
+    log('story','【升位战胜】你击败第'+rank+'分宗守擂弟子——玄天道宗敕令：第'+rank+'分宗与第'+S.sect.rank+'分宗互换名次！如今你执掌第'+S.sect.rank+'分宗「'+sectBranchAlias(S.sect.rank)+'」（贡献 +'+c+'，'+moneyName()+' +'+fmtMoney(st)+'）。宗门气运渐盛。');
+    toast('升位成功：第 '+S.sect.rank+' 分宗！','good');
+    if(S.sect.rank===1){
+      log('story','一百零七战，从垫底到登顶——第108分宗的旗帜升起在玄天道宗最高处！天宗本部震动，宗主亲召：「自此，第108分宗，为天宗第一分宗。」');
+      toast('第一分宗 · 登顶！','good');
+    }else if((108-S.sect.rank)%10===0){
+      S.sect.contrib+=100;S.stones+=Math.floor(500*Math.pow(1.5,curR()));
+      log('story','【十名之约】每进十名，天宗必有嘉奖——贡献 +100，赏赐另附。分宗上下与有荣焉。');
+    }
+  }else{
+    S.sect.spars++;
+    const c=12+r*6,st=Math.floor(30*Math.pow(1.5,r));
+    S.sect.contrib+=c;S.stones+=st;
+    log('good','【切磋胜】你与同门【'+ed.n+'】切磋获胜：贡献 +'+c+'，'+moneyName()+' +'+fmtMoney(st)+'。');
+    bumpSect('spar',1);
+  }
+}
+function buySectItem(id){
+  if(!sectOpened())return;
+  const it=SECT_SHOP.find(x=>x.id===id);if(!it)return;
+  if(S.sect.contrib<it.cost){toast('贡献不足：需 '+it.cost+'（现有 '+S.sect.contrib+'）');return;}
+  if(it.reqTitle&&(S.sect.title||0)<it.reqTitle){toast('职位不足：需 '+SECT_TITLES[it.reqTitle].n);return;}
+  S.sect.contrib-=it.cost;
+  if(it.give)it.give(S);
+  if(it.gf)grantGf(it.gf);
+  if(it.sk)grantSkill(it.sk);
+  log('good','【贡献阁】兑得【'+it.n+'】。');
+  toast('兑换成功：'+it.n,'good');
+  renderAll();save();
+}
+function promoteTitle(){
+  if(!sectOpened())return;
+  const t=S.sect.title||0,nx=SECT_TITLES[t+1];
+  if(!nx){toast('你已是分宗首席');return;}
+  if(S.sect.contrib<nx.need){toast('贡献不足：需累计 '+nx.need+'（现有 '+S.sect.contrib+'）');return;}
+  S.sect.title=t+1;
+  const st=Math.floor(500*Math.pow(2.5,t)),c=50*(t+1);
+  S.stones+=st;S.sect.contrib+=c;
+  log('story','【晋升】玄天道宗敕令：擢升你为第'+S.sect.rank+'分宗「'+nx.n+'」！'+nx.d+'（奖励：'+moneyName()+' '+fmtMoney(st)+'、贡献 +'+c+'）');
+  toast('晋升：'+nx.n,'good');
+  checkAch();renderAll();save();
 }
 
 /* ---------------- 装备强化 / 灵兽升级 / 功法装备 ---------------- */
@@ -1318,6 +1445,8 @@ function achVal(a){
     case 'bones':return S.bones;
     case 'danExp':return S.danExp;
     case 'days':return S.day;
+    case 'sectprog':return sectProg();
+    case 'secttitle':return (S.sect&&S.sect.title)||0;
     default:return S.stat[a.kind]||0;
   }
 }
@@ -1404,6 +1533,7 @@ const TABS=[
  {id:'bag',n:'行囊'},
  {id:'tower',n:'九星塔'},
  {id:'wugong',n:'武功'},
+ {id:'sect',n:'宗门'},
  {id:'codex',n:'图鉴'},
  {id:'stars',n:'九星'},
  {id:'realms',n:'境界'},
@@ -1538,7 +1668,7 @@ function renderHunt(){
       return '<button class="btn'+(cd||B.mp<s.qi?' ghost':'')+'" '+(B.over?'disabled':'')+' onclick="useSkill(\''+s.id+'\')">'+s.name+
         '<div class="small">威 x'+(s.effect==='stars'?(2+0.9*starCnt()).toFixed(1):s.mult)+'　灵力 '+s.qi+(cd?('　冷'+cd):'')+'</div></button>';
     }).join('');
-    html='<div class="panel"><h3>战斗 · '+B.e.n+(B.afx?' <span class="afx">'+B.afx.n+'</span>':'')+(B.tower?' <span class="afx">塔'+B.tower+'层</span>':'')+(B.e.boss?' <span class="boss-tag" style="color:var(--blood);font-size:12px;border:1px solid var(--blood);border-radius:4px;padding:0 4px">首领</span>':'')+'</h3>'+
+    html='<div class="panel"><h3>战斗 · '+B.e.n+(B.afx?' <span class="afx">'+B.afx.n+'</span>':'')+(B.tower?' <span class="afx">塔'+B.tower+'层</span>':'')+(B.zid==='sect'?' <span class="afx">'+(B.sectMode==='promo'?'升位战':'同门切磋')+'</span>':'')+(B.e.boss?' <span class="boss-tag" style="color:var(--blood);font-size:12px;border:1px solid var(--blood);border-radius:4px;padding:0 4px">首领</span>':'')+'</h3>'+
      '<div class="fighter"><div class="nm"><span class="jade">龙尘</span><span>'+fmt(Math.max(0,B.php))+' / '+fmt(B.pmax)+'</span></div>'+
      '<div class="bar hp"><i style="width:'+clamp(B.php/B.pmax*100,0,100)+'%"></i><span>气血</span></div>'+
      '<div class="bar mp" style="margin-top:3px"><i style="width:'+clamp(B.mp/B.mpmax*100,0,100)+'%"></i><span>灵力 '+Math.floor(B.mp)+'</span></div></div>'+
@@ -1913,6 +2043,7 @@ function renderWugong(){
     let act='';
     if(own)act='<button class="btn'+(inBar?' ghost':'')+'" onclick="toggleSkl(\''+sk.id+'\')">'+(inBar?'卸下':'装配')+'</button>';
     else if(sk.src==='quest')act='<span class="tag rank">剧情传承</span>';
+    else if(sk.src==='sect')act='<span class="tag rank">贡献阁兑换</span>';
     else act='<button class="btn'+(locked?' ghost':'')+'" '+(locked?'disabled':'')+' onclick="buySkill(\''+sk.id+'\')">'+fmtMoney(skillPrice(sk))+' '+moneyName()+'</button>';
     return '<div class="row-item"><div class="info"><div class="nm">'+sk.name+'<span class="tag">'+(SK_TIER[sk.tier-1]||'')+'</span>'+(own?'<span class="tag rank">已习</span>':'')+(inBar?'<span class="tag">栏中</span>':'')+(locked&&!own?'<span class="tag no">'+req+'</span>':'')+'</div>'+
      '<div class="small muted">'+sk.d+'</div>'+
@@ -1926,6 +2057,7 @@ function renderWugong(){
     let act='';
     if(own)act='<button class="btn'+(on?' ghost':'')+'" onclick="equipGf(\''+g.id+'\')">'+(on?'收功':'运功')+'</button>';
     else if(g.src==='quest')act='<span class="tag rank">剧情传承</span>';
+    else if(g.src==='sect')act='<span class="tag rank">贡献阁兑换</span>';
     else if(g.floor)act='<span class="tag no">九星塔 · 第 '+g.floor+' 层</span>';
     else act='<button class="btn'+(locked?' ghost':'')+'" '+(locked?'disabled':'')+' onclick="buyGf(\''+g.id+'\')">'+fmtMoney(g.price||0)+' '+moneyName()+'</button>';
     return '<div class="row-item"><div class="info"><div class="nm">'+g.name+'<span class="tag">'+(SK_TIER[g.tier-1]||'')+'</span>'+(own?'<span class="tag rank">已修</span>':'')+(on?'<span class="tag">运功中</span>':'')+(locked&&!own?'<span class="tag no">需 '+REALMS[g.reqR].name+'</span>':'')+'</div>'+
@@ -1941,6 +2073,48 @@ function renderWugong(){
    '<div class="panel"><h3>功法（运功 '+S.gf.on.length+'/'+gfSlots()+' 槽）</h3>'+
    '<p class="small muted">境界每进四重多一运功槽，多部功法可同修并济；九星塔里程碑与剧情所授者，传功阁中不售。</p>'+chips(wgfTier,'wgfFilter')+gfRows+
    (gfList.length>wgfN?'<div style="text-align:center;margin:8px"><button class="btn ghost" onclick="wgfN+=40;renderWugong()">显示更多（余 '+(gfList.length-wgfN)+' 部）</button></div>':'')+
+   '</div></div>';
+}
+/* ---------------- 宗门页：一百零八分宗 ---------------- */
+function renderSect(){
+  ensureSectDaily();
+  if(!sectOpened()){
+    $('main').innerHTML='<div class="panel"><h3>玄天道宗 · 第108分宗</h3><p class="small muted">尚无宗门在册。踏入通脉之境（'+REALMS[6].name+'），剧情「拜入玄天道宗」开启后，你将入册执掌最末的第108分宗。</p></div>';
+    return;
+  }
+  const rank=S.sect.rank,prog=sectProg(),pct=Math.round(prog/107*100);
+  const ti=SECT_TITLES[S.sect.title||0],nx=SECT_TITLES[(S.sect.title||0)+1];
+  const fxD=['修炼 +'+Math.round((sectFx('qps')+sectTitleFx('qps'))*100)+'%','全属性 +'+Math.round(sectFx('all')*100)+'%','灵气上限 +'+Math.round(sectFx('cap')*100)+'%','掉落 +'+Math.round((sectFx('drop')+sectTitleFx('drop'))*100)+'%','所得 +'+Math.round(sectFx('gain')*100)+'%'];
+  const qs=S.sect.qs.map((qi,i)=>{
+    const t=SECT_TASKS[qi],done=S.sect.done[i];
+    return '<div class="row-item"><div class="info"><div class="nm">'+t.n+'<span class="tag">'+(done?'已完成':S.sect.prog[i]+' / '+S.sect.cnt[i])+'</span></div>'+
+     '<div class="small muted">'+t.txt(S.sect.cnt[i])+' ｜ 奖：贡献 +'+S.sect.rw[i]+'、'+moneyName()+'若干</div></div>'+
+     '<div>'+(done?'<span class="tag rank">已领赏</span>':'<span class="tag no">进行中</span>')+'</div></div>';
+  }).join('');
+  const shop=SECT_SHOP.map(it=>{
+    const ok=S.sect.contrib>=it.cost&&(!it.reqTitle||(S.sect.title||0)>=it.reqTitle);
+    return '<div class="row-item"><div class="info"><div class="nm">'+it.n+(it.reqTitle?'<span class="tag no">需 '+SECT_TITLES[it.reqTitle].n+'</span>':'')+'</div>'+
+     '<div class="small muted">'+it.d+'</div></div>'+
+     '<div><button class="btn'+(ok?'':' ghost')+'" '+(ok?'':'disabled')+' onclick="buySectItem(\''+it.id+'\')">贡献 '+it.cost+'</button></div></div>';
+  }).join('');
+  $('main').innerHTML='<div class="grid2">'+
+   '<div class="panel"><h3>玄天道宗 · 第'+rank+'分宗「'+sectBranchAlias(rank)+'」'+(rank===1?'<span class="tag rank">天下第一分宗</span>':'')+'</h3>'+
+   '<div class="bar slim"><i style="width:'+pct+'%"></i><span>爬升进度 '+prog+' / 107（第108 → 第1）</span></div>'+
+   '<div class="small muted">职位：<b class="gold">'+ti.n+'</b>（'+ti.d+'）｜ 生涯：升位 '+S.sect.wins+' 胜 · 切磋 '+S.sect.spars+' 场</div>'+
+   '<div class="small">宗门气运：'+fxD.map(x=>'<span class="tag">'+x+'</span>').join(' ')+'</div>'+
+   '<hr class="hr"><h4 class="small">升位战 <span class="small muted">（耗 2 行动点 · 挑战上一名分宗守擂弟子，胜则互换名次）</span></h4>'+
+   (rank<=1?'<p class="small gold">一百零七战功成——第108分宗，已是玄天道宗第一分宗。</p>':
+    '<button class="btn big" onclick="startSectPromo()">挑战第'+(rank-1)+'分宗（守擂弟子 · '+REALMS[sectEnemyR(rank-1)].name+'）</button>')+
+   '<h4 class="small" style="margin-top:8px">同门切磋 <span class="small muted">（耗 1 行动点 · 胜得贡献，败无损失）</span></h4>'+
+   '<button class="btn" onclick="startSectSpar()">切磋一场</button>'+
+   '<hr class="hr"><h4 class="small">职位晋升</h4>'+
+   (nx?'<div class="row-item"><div class="info"><div class="nm">'+nx.n+'</div><div class="small muted">'+nx.d+' ｜ 需累计贡献 '+nx.need+'（现有 '+S.sect.contrib+'）</div></div>'+
+    '<div><button class="btn'+(S.sect.contrib>=nx.need?'':' ghost')+'" '+(S.sect.contrib>=nx.need?'':'disabled')+' onclick="promoteTitle()">晋升</button></div></div>'
+   :'<p class="small gold">分宗首席——一人之下的位置，其实早已一人之上。</p>')+
+   '</div>'+
+   '<div class="panel"><h3>门派任务 <span class="small muted">（每日刷新 · 与悬赏并行）</span></h3>'+qs+
+   '<hr class="hr"><h3>贡献阁 <span class="small muted">（贡献 '+S.sect.contrib+'）</span></h3>'+shop+
+   '<p class="small muted">分宗藏经独一份：玄天罡气诀、玄天十三剑、玄天道经、玄天镇狱拳——皆以贡献兑换，他处无售。</p>'+
    '</div></div>';
 }
 /* ---------------- 每日悬赏面板 / 九星塔页 / 图鉴页 ---------------- */
@@ -2061,6 +2235,7 @@ function renderAll(){
   else if(curTab==='bag')renderBag();
   else if(curTab==='tower')renderTower();
   else if(curTab==='wugong')renderWugong();
+  else if(curTab==='sect')renderSect();
   else if(curTab==='codex')renderCodex();
   else if(curTab==='stars')renderStars();
   else if(curTab==='realms')renderRealms();

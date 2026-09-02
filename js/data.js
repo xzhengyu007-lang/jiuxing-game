@@ -497,3 +497,73 @@ const GF_SUF=['诀','经','功','典','真解','宝卷','心法','秘典','神�
      d:GF_DESC[t-1]});
   }
 })();
+/* ============================================================
+ * 玄天道宗 · 一百零八分宗（门派系统）
+ * 主角自最弱的第 108 分宗入册，以升位战逐名爬升，直至第一分宗。
+ * ============================================================ */
+
+/* ---------- 分宗职位（贡献累计晋升） ---------- */
+const SECT_TITLES=[
+ {n:'杂役弟子',need:0,    d:'分宗最底层，扫地挑水，亦能偷学几手。'},
+ {n:'外门弟子',need:100,  d:'入外门，可入藏经阁一层。'},
+ {n:'内门弟子',need:1200, d:'入内门，宗门气运加身。'},
+ {n:'真传弟子',need:6000, d:'得真传，分宗倾力栽培。'},
+ {n:'分宗首席',need:20000,d:'一宗之首，号令分宗。'},
+];
+
+/* ---------- 分宗守擂弟子 / 同门（名字与名次绑定，胜则名次互换） ---------- */
+const SECT_SURN=['林','苏','叶','陆','秦','萧','楚','沈','顾','燕','裴','温'];
+const SECT_GIVEN=['无涯','青临','惊鸿','九幽','断岳','流火','听雪','镇岳','寒山','拂衣','孤鸿','挽风','沉舟','裂云','踏月','问天','掣电','衔烛','负霜','擎苍'];
+function sectDiscipleName(seed){return SECT_SURN[seed%12]+SECT_GIVEN[(seed*7)%20];}
+const SECT_ALIAS_A=['青枫','落霞','寒山','听雨','望岳','流云','碎石','抱朴','栖霞','洗剑','归尘','藏锋'];
+const SECT_ALIAS_B=['','峰','谷','斋','台','涧','崖','堂'];
+function sectBranchAlias(k){const s=(k*31+7)%96;return SECT_ALIAS_A[s%12]+SECT_ALIAS_B[(s*3)%8];}
+function sectEnemyR(rank){return Math.max(1,Math.min(21,Math.round(1+(108-rank)*20/107)));} // 第108分宗对手r1，第1分宗r21
+
+/* ---------- 每日门派任务（与悬赏并存，奖贡献） ---------- */
+const SECT_TASKS=[
+ {k:'kill',   n:'斩妖', txt:function(v){return '击杀 '+v+' 名妖敌';}},
+ {k:'explore',n:'采药', txt:function(v){return '采药 '+v+' 次';}},
+ {k:'craft',  n:'炼丹', txt:function(v){return '炼丹 '+v+' 炉';}},
+ {k:'tower',  n:'闯塔', txt:function(v){return '挑战九星塔 '+v+' 次';}},
+ {k:'spar',   n:'切磋', txt:function(v){return '同门切磋 '+v+' 次';}},
+];
+function sectTaskCount(k,r){var base={kill:10,explore:8,craft:6,tower:3,spar:2}[k]||5;return base+Math.floor(r/2);}
+function sectTaskReward(r){return 60+r*40;} // 贡献点
+
+/* ---------- 贡献阁（贡献点兑换；部分需职位） ---------- */
+const SECT_SHOP=[
+ {id:'sq1',n:'回气丹 x5',    cost:60,  d:'分宗丹房常备，恢复气血。',give:function(S){S.pills.huiqi=(S.pills.huiqi||0)+5;}},
+ {id:'sq2',n:'兽核 x10',     cost:120, d:'历练弟子缴获，炼丹淬体皆用。',give:function(S){S.mats.shouhe=(S.mats.shouhe||0)+10;}},
+ {id:'sq3',n:'聚灵丹 x3',    cost:180, d:'五分钟内修炼速度大增。',give:function(S){S.pills.juling=(S.pills.juling||0)+3;}},
+ {id:'sq4',n:'当品灵植 x10', cost:150, d:'药园当季所出，按你境界给阶。',give:function(S){var t=Math.max(1,Math.min(10,curR()+1));var arr=HERBS_BY_TIER[t];S.herbs[arr[(S.day+t)%arr.length]]=(S.herbs[arr[(S.day+t)%arr.length]]||0)+10;}},
+ {id:'sq5',n:'破境丹 x1',    cost:600, reqTitle:1,d:'冲击境界时自动服用，成功率+20%。',give:function(S){S.pills.pojing=(S.pills.pojing||0)+1;}},
+ {id:'sq6',n:'护命丹 x2',    cost:800, reqTitle:1,d:'重伤自动保命。',give:function(S){S.pills.huming=(S.pills.huming||0)+2;}},
+ {id:'sq7',n:'玄天罡气诀',   cost:1500,reqTitle:2,gf:'sg1',d:'分宗贡献阁秘传功法：攻防气血大成。'},
+ {id:'sq8',n:'玄天十三剑',   cost:2000,reqTitle:2,sk:'ss1',d:'分宗贡献阁秘传剑诀，一剑十三重浪。'},
+ {id:'sq9',n:'玄天道经',     cost:9000,reqTitle:3,gf:'sg2',d:'玄天道宗镇宗道法残卷，天宗直授。'},
+ {id:'sq10',n:'玄天镇狱拳',  cost:12000,reqTitle:3,sk:'ss2',d:'玄天镇狱堂不传之拳，一拳镇狱。'},
+];
+
+/* ---------- 分宗专属武学（贡献阁兑换，不入传功阁发售） ---------- */
+SKILLS.push(
+ {id:'ss1',name:'玄天十三剑',tier:7,src:'sect',mult:260,qi:36,cd:2,req:{realm:6},
+  d:'玄天道宗分宗贡献阁秘传——一剑挥出，十三重剑浪层层相叠，同境鲜有敌手。'},
+ {id:'ss2',name:'玄天镇狱拳',tier:9,src:'sect',mult:5200,qi:150,cd:4,req:{realm:12},
+  d:'玄天镇狱堂不传之拳——拳出如狱门开阖，镇压之气自成领域。'}
+);
+GONGFAS.push(
+ {id:'sg1',name:'玄天罡气诀',tier:7,src:'sect',fx:{atk:0.25,def:0.20,hp:0.20},
+  d:'分宗贡献阁秘传——玄天罡气护体练力：攻击+25%、防御+20%、气血+20%。'},
+ {id:'sg2',name:'玄天道经',tier:9,src:'sect',fx:{all:0.30,qps:0.45,cap:0.25},
+  d:'玄天道宗镇宗道法残卷——全属性+30%、修炼速度+45%、每日修为上限+25%。'}
+);
+
+/* ---------- 分宗成就 ---------- */
+ACHS.push(
+ {id:'a_sc50',n:'百尺竿头',     kind:'sectprog', v:58, rw:{stones:2e4},  d:'带领分宗前进至前 50 名。'},
+ {id:'a_sc10',n:'宗门新贵',     kind:'sectprog', v:98, rw:{stones:8e4},  d:'带领分宗前进至前 10 名。'},
+ {id:'a_sc1', n:'第108分宗之光',kind:'sectprog', v:107,rw:{stones:30e4,ap:10},d:'带领第108分宗登顶第一分宗。'},
+ {id:'a_sct', n:'真传弟子',     kind:'secttitle',v:3,  rw:{stones:5e4},  d:'晋升真传弟子。'}
+);
+
