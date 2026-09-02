@@ -567,3 +567,36 @@ ACHS.push(
  {id:'a_sct', n:'真传弟子',     kind:'secttitle',v:3,  rw:{stones:5e4},  d:'晋升真传弟子。'}
 );
 
+/* ================= 练体 · 肉身九秘（淬体 + 练体功法） ================= */
+const BODY_STAGES=[
+ {n:'淬皮',st:'皮',fx:'def',  v:0.02, d:'皮糙如革，钝击难入——防御 +2%/重。'},
+ {n:'锻肉',st:'肉',fx:'hp',   v:0.02, d:'血肉如炉，气血雄浑——气血 +2%/重。'},
+ {n:'伸筋',st:'筋',fx:'spd',  v:1,    d:'筋长力透，身法如电——速度 +1/重（追击率）。'},
+ {n:'砺骨',st:'骨',fx:'atk',  v:0.02, d:'骨如神铁，拳脚生风——攻击 +2%/重。'},
+ {n:'洗脏',st:'脏',fx:'regen',v:0.004,d:'五脏如鼎，气血自生——每回合回复气血 +0.4%/重。'},
+ {n:'通髓',st:'髓',fx:'crit', v:0.02, d:'髓通神机，一眼破绽——暴击 +2%/重、暴伤 +0.06/重。'},
+ {n:'沸血',st:'血',fx:'leech',v:0.015,d:'气血如潮，愈战愈勇——吸血 +1.5%/重。'},
+ {n:'开窍',st:'窍',fx:'dodge',v:0.015,d:'周身窍开，身形难测——闪避 +1.5%/重。'},
+ {n:'罡气',st:'罡',fx:'pen',  v:0.015,d:'罡气离体，破势透甲——穿透 +1.5%/重、反震 +3%/重。'}
+];
+const BODY_MAX_LV=10;
+function bodyCost(i,lv,r){ // 第 i 秘第 lv 重淬炼费用（r=境界）
+  return {qi:Math.floor(20*Math.pow(1.36,r*LAYER_CNT)*(0.35+0.12*lv)*(1+i*0.18)),
+   st:Math.floor(80*Math.pow(2.0,r)*(1+lv*0.8)*(1+i*0.25)),
+   sh:i>=4?(2+lv*2):0};
+}
+/* —— 练体功法（外炼筋骨皮，内炼一口气；武功阁传功有售，玄罡不坏体藏于分宗贡献阁） —— */
+GONGFAS.push(
+ {id:'bt1',name:'铁皮功',    tier:1,src:'ge',kind:'body',price:900, reqR:1,fx:{def:0.15,dodge:0.03},d:'外功入门——气走皮膜，抗击能挨：防御+15%、闪避+3%。'},
+ {id:'bt2',name:'虎骨强身桩',tier:2,src:'ge',kind:'body',price:2600,reqR:2,fx:{atk:0.18,thorns:0.08},d:'站桩如虎，骨力千钧：攻击+18%、受击反震+8%。'},
+ {id:'bt3',name:'灵筋身法',  tier:3,src:'ge',kind:'body',price:6000,reqR:3,fx:{spd:3,dodge:0.04},d:'筋活如龙，动若脱兔：速度+3、闪避+4%。'},
+ {id:'bt4',name:'铜脏铁腑诀',tier:4,src:'ge',kind:'body',price:12000,reqR:4,fx:{regen:0.02,hp:0.18},d:'五脏如铜浇铁铸，气血生生不息：气血+18%、每回合回复+2%。'},
+ {id:'bt5',name:'通髓贯神篇',tier:5,src:'ge',kind:'body',price:26000,reqR:5,fx:{crit:0.08,cdmg:0.3},d:'髓通神机，一击贯神：暴击+8%、暴击伤害+30%。'},
+ {id:'bt6',name:'沸血魔功',  tier:6,src:'ge',kind:'body',price:50000,reqR:6,fx:{leech:0.08,atk:0.20},d:'以战养战，血沸如魔：吸血+8%、攻击+20%。'},
+ {id:'bt7',name:'周天开窍经',tier:7,src:'ge',kind:'body',price:100000,reqR:7,fx:{dodge:0.08,spd:4},d:'周身大穴尽数窍开，身形鬼神难测：闪避+8%、速度+4。'},
+ {id:'bt8',name:'玄罡不坏体',tier:8,src:'sect',kind:'body',reqR:6,fx:{pen:0.15,thorns:0.25,def:0.22},d:'玄天道宗不传之秘——罡气离体，金身不坏：穿透+15%、反震+25%、防御+22%。分宗贡献阁秘藏。'}
+);
+SECT_SHOP.push({id:'sq11',n:'玄罡不坏体',cost:3000,reqTitle:2,gf:'bt8',d:'分宗贡献阁秘藏——玄天罡气淬体不坏之身。'});
+ACHS.push(
+ {id:'a_body',n:'肉身九秘',kind:'bodylv',v:90,rw:{stones:20e4},d:'九秘俱通，九十重淬体功成。'}
+);

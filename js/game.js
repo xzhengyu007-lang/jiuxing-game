@@ -48,6 +48,7 @@ function newState(){
     towerBest:0, gf:{own:{},on:[]}, eqLv:0, starLv:{}, starPow:{}, starUsed:{},
     sk:{own:{},load:['bati']},
     sect:{rank:108,contrib:0,title:0,wins:0,spars:0,day:0,qs:[],prog:[],done:[],cnt:[],rw:[]},
+    body:{li:0,lv:[0,0,0,0,0,0,0,0,0]},
   };
 }
 function save(){ if(!S)return; S.lastTick=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
@@ -141,7 +142,7 @@ function buyGf(id){
   log('good','购得功法【'+g.name+'】！');renderAll();save();
 }
 function gfFxTxt(fx){
-  const L={qps:'修炼',cap:'上限',ap:'行动',atk:'攻',def:'防',hp:'气血',drop:'掉落',craft:'丹成',gain:'所得',all:'全属性'};
+  const L={qps:'修炼',cap:'上限',ap:'行动',atk:'攻',def:'防',hp:'气血',drop:'掉落',craft:'丹成',gain:'所得',all:'全属性',crit:'暴击',cdmg:'暴伤',dodge:'闪避',leech:'吸血',spd:'速度',pen:'穿透',regen:'再生',thorns:'反震'};
   return Object.keys(fx||{}).map(k=>'+'+Math.round(fx[k]*100)+'% '+L[k]).join(' · ');
 }
 function buffMult(){
@@ -180,12 +181,22 @@ function heroStats(){
   }
   if(S.flags.fireSeed)atk*=1.15;
   const sAll=1+starFx('all')+gfFx('all')+sectFx('all');
-  atk*=sAll*(1+starFx('atk')+gfFx('atk'));
-  def*=sAll*(1+starFx('def')+gfFx('def'));
-  hp*=sAll*(1+starFx('hp')+gfFx('hp'));
+  atk*=sAll*(1+starFx('atk')+gfFx('atk'))*(1+bodyFx('atk'));
+  def*=sAll*(1+starFx('def')+gfFx('def'))*(1+bodyFx('def'));
+  hp*=sAll*(1+starFx('hp')+gfFx('hp'))*(1+bodyFx('hp'));
   const eqm=1+0.08*(S.eqLv||0);
   atk*=eqm;def*=eqm;hp*=eqm;
-  return {hp:hp,atk:atk,def:def};
+  const sec={ // 八维战体系：暴击/暴伤/闪避/吸血/速度/穿透/再生/反震
+    crit:Math.min(0.6,bodyFx('crit')+gfFx('crit')),
+    cdmg:1.6+0.06*((S.body&&S.body.lv[5])||0)+gfFx('cdmg'),
+    dodge:Math.min(0.4,bodyFx('dodge')+gfFx('dodge')),
+    leech:Math.min(0.4,bodyFx('leech')+gfFx('leech')),
+    spd:Math.min(10,bodyFx('spd')+gfFx('spd')),
+    pen:Math.min(0.6,bodyFx('pen')+gfFx('pen')),
+    regen:Math.min(0.08,bodyFx('regen')+gfFx('regen')),
+    thorns:Math.min(1,bodyFx('thorns')+gfFx('thorns'))
+  };
+  return {hp:hp,atk:atk,def:def,sec:sec};
 }
 /* ---------------- 九星专属加成 / 功法 / 每日修为上限 ---------------- */
 function starLvOf(i){ // 凝星重数（旧档已开未凝者视为一重）
@@ -722,7 +733,8 @@ function beginBattle(zid,idx,ed,tower){
     dodge:(afx&&afx.dodge)||0,leech:(afx&&afx.leech)||0,
     php:st.hp,pmax:st.hp,patk:st.atk,pdef:st.def,
     mp:60+curR()*8,mpmax:60+curR()*8,
-    stun:0,bleedT:0,bleedDmg:0,cds:{},turn:1,over:false,log:[]
+    stun:0,bleedT:0,bleedDmg:0,cds:{},turn:1,over:false,log:[],
+    sec:st.sec||null
   };
   if(afx)battleLog('此妖携异象而生——'+afx.n+'！'+afx.d,'bad');
   battleLog(ed.boss?'【'+ed.n+'】仰天长啸，杀气如潮——大战爆发！':'你与【'+ed.n+'】缠斗在一起！','');
@@ -754,10 +766,13 @@ function useSkill(sid){
     battleLog('【'+B.e.n+'】身形一晃，竟避开了你的攻势！','bad');
     enemyTurn();renderBattle();return;
   }
+  const pen=(B.sec&&B.sec.pen)||0;
   let dmg;
   if(sk.effect==='stun'){dmg=Math.max(B.patk*mult*rnd(0.9,1.15),B.patk*0.2);} // 黑锅：无视防御
-  else dmg=Math.max(B.patk*mult*rnd(0.9,1.15)-B.edef*0.55,B.patk*0.12);
+  else dmg=Math.max(B.patk*mult*rnd(0.9,1.15)-B.edef*0.55*(1-pen),B.patk*0.12);
   dmg=Math.floor(dmg);
+  let crit=false;
+  if(B.sec&&(B.sec.crit||0)>0&&Math.random()<B.sec.crit){dmg=Math.floor(dmg*(B.sec.cdmg||1.6));crit=true;}
   if(B.shield>0&&dmg>0){
     const ab=Math.min(B.shield,dmg);B.shield-=ab;dmg-=ab;
     battleLog('【'+B.e.n+'】灵光护盾碎裂，抵消 '+fmt(ab)+' 伤害。','bad');
@@ -770,8 +785,14 @@ function useSkill(sid){
   }
   if(sk.effect==='stun'){B.stun=1;extra='，诸邪避退，敌人被震慑一回合';}
   if(S.wearing.weapon==='xueyin'){B.php=Math.min(B.pmax,B.php+Math.floor(dmg*0.1));}
-  battleLog('你使出【'+sk.name+'】，造成 '+fmt(dmg)+' 伤害'+extra,sk.effect?'good':'');
+  if(B.sec&&(B.sec.leech||0)>0&&dmg>0){const hl=Math.floor(dmg*B.sec.leech);B.php=Math.min(B.pmax,B.php+hl);extra+='，饮血回复 '+fmt(hl);}
+  battleLog('你使出【'+sk.name+'】，'+(crit?'暴击！':'')+'造成 '+fmt(dmg)+' 伤害'+extra,(sk.effect||crit)?'good':'');
   if(B.ehp<=0){winBattle();return;}
+  if(B.sec&&(B.sec.spd||0)>0&&Math.random()<Math.min(0.25,B.sec.spd*0.025)){
+    const d2=Math.max(Math.floor(dmg*0.5),1);B.ehp-=d2;
+    battleLog('你身法快到极致，追击一记——再造成 '+fmt(d2)+' 伤害！','good');
+    if(B.ehp<=0){winBattle();return;}
+  }
   enemyTurn();
   renderBattle();
 }
@@ -786,11 +807,18 @@ function enemyTurn(){
   }
   if(B.stun>0){
     B.stun--;battleLog('【'+B.e.n+'】被震慑，无法动弹。','good');
+  }else if(B.sec&&(B.sec.dodge||0)>0&&Math.random()<B.sec.dodge){
+    battleLog('你身形微晃，堪堪避开了【'+B.e.n+'】的扑击！','good');
   }else{
     const dmg=Math.max(Math.floor(B.eatk*rnd(0.85,1.15)-B.pdef*0.55),Math.floor(B.eatk*0.1));
     B.php-=dmg;
     if(B.leech&&dmg>0)B.ehp=Math.min(B.emax,B.ehp+Math.floor(dmg*B.leech));
     battleLog('【'+B.e.n+'】扑击而来，你受到 '+fmt(dmg)+' 伤害。','bad');
+    if(B.sec&&(B.sec.thorns||0)>0&&dmg>0){
+      const t=Math.floor(dmg*B.sec.thorns);B.ehp-=t;
+      battleLog('罡气反震，【'+B.e.n+'】受 '+fmt(t)+' 反噬伤害。','good');
+      if(B.ehp<=0){winBattle();return;}
+    }
     if(B.php<=0){
       const sp=(S.pills.huming||0)>0?'huming':bestPillOf('save');
       if(sp){
@@ -806,6 +834,11 @@ function enemyTurn(){
         log('bad','历练【'+B.e.n+'】不敌，身负重伤逃回。');
       }
     }
+  }
+  if(B.sec&&(B.sec.regen||0)>0&&B.php<B.pmax&&!B.over){
+    const hl=Math.floor(B.pmax*B.sec.regen);
+    B.php=Math.min(B.pmax,B.php+hl);
+    battleLog('气血自生，你回复了 '+fmt(hl)+' 点气血。','good');
   }
   for(const k in B.cds){if(B.cds[k]>0)B.cds[k]--;}
   B.mp=Math.min(B.mpmax,B.mp+8);
@@ -1390,6 +1423,47 @@ function promoteTitle(){
   checkAch();renderAll();save();
 }
 
+/* ---------------- 练体 · 肉身九秘 ---------------- */
+function bodyFx(k){
+  if(!S||!S.body)return 0;
+  let v=0;
+  for(let i=0;i<BODY_STAGES.length;i++){if(BODY_STAGES[i].fx===k)v+=BODY_STAGES[i].v*(S.body.lv[i]||0);}
+  return v;
+}
+function bodyTotal(){
+  if(!S||!S.body)return 0;
+  let t=0;for(let i=0;i<S.body.lv.length;i++)t+=S.body.lv[i]||0;
+  return t;
+}
+function bodyCur(){ // 当前淬炼中的秘藏与重数
+  if(!S.body)S.body={li:0,lv:[0,0,0,0,0,0,0,0,0]};
+  if(S.body.li>=BODY_STAGES.length)return null;
+  return {i:S.body.li,lv:S.body.lv[S.body.li]||0};
+}
+function bodyCostNow(){
+  const c=bodyCur();
+  if(!c)return null;
+  return bodyCost(c.i,c.lv,curR());
+}
+function temperBody(){ // 淬炼一层：耗灵气/灵石（四秘之后另耗兽核），不耗行动点
+  const c=bodyCur();
+  if(!c){toast('九秘俱通，肉身已臻大成——罡气离体，金身不坏');return;}
+  const cost=bodyCostNow();
+  if(S.qi<cost.qi){toast('灵气不足：需 '+fmt(cost.qi));return;}
+  if(S.stones<cost.st){toast(moneyName()+'不足：需 '+fmtMoney(cost.st));return;}
+  if(cost.sh&&(S.mats.shouhe||0)<cost.sh){toast('兽核不足：需 '+cost.sh+' 枚');return;}
+  S.qi-=cost.qi;S.stones-=cost.st;if(cost.sh)S.mats.shouhe-=cost.sh;
+  S.body.lv[c.i]++;
+  const st=BODY_STAGES[c.i];
+  if(S.body.lv[c.i]>=BODY_MAX_LV){
+    S.body.li++;
+    log('good','【练体 · '+st.n+'】十重功成——'+st.st+'之秘圆满！'+(bodyCur()?'下一秘：【'+BODY_STAGES[S.body.li].n+'】。':'肉身九秘，俱通大成！'));
+  }else{
+    log('good','【练体 · '+st.n+'】第 '+cnL(S.body.lv[c.i])+' 重淬成——'+st.d);
+  }
+  checkAch();renderAll();save();
+}
+
 /* ---------------- 装备强化 / 灵兽升级 / 功法装备 ---------------- */
 function upEqCost(){return Math.floor(2000*Math.pow(2.1,S.eqLv||0));}
 function upgradeEq(){
@@ -1448,6 +1522,7 @@ function achVal(a){
     case 'days':return S.day;
     case 'sectprog':return sectProg();
     case 'secttitle':return (S.sect&&S.sect.title)||0;
+    case 'bodylv':return bodyTotal();
     default:return S.stat[a.kind]||0;
   }
 }
@@ -1535,6 +1610,7 @@ const TABS=[
  {id:'tower',n:'九星塔'},
  {id:'wugong',n:'武功'},
  {id:'sect',n:'宗门'},
+ {id:'body',n:'练体'},
  {id:'codex',n:'图鉴'},
  {id:'stars',n:'九星'},
  {id:'realms',n:'境界'},
@@ -1556,7 +1632,7 @@ function renderTop(){
   $('topbar').innerHTML=
    '<div><div class="tb-name">龙尘</div>'+
    '<div class="tb-realm">'+realmTxt()+' <span class="tb-sub">· '+REALMS[curR()].tier+(REALMS[curR()].who?' · '+REALMS[curR()].who:'')+'</span></div>'+
-   '<div class="tb-sub">第 '+S.day+' 日 ｜ 战力 '+fmt(st.atk*10+st.hp/10+(S.bones*50))+' ｜ 祭骨 '+S.bones+' 根 ｜ 九星 '+starCnt()+'/9 ｜ 丹修 '+DAN_RANKS[danRankIdx()]+'</div></div>'+
+   '<div class="tb-sub">第 '+S.day+' 日 ｜ 战力 '+fmt(st.atk*10+st.hp/10+(S.bones*50)+bodyTotal()*30)+' ｜ 祭骨 '+S.bones+' 根 ｜ 练体 '+bodyTotal()+'/90 重 ｜ 九星 '+starCnt()+'/9 ｜ 丹修 '+DAN_RANKS[danRankIdx()]+'</div></div>'+
    '<div class="res">'+
    '<div class="it"><span>灵气'+(buff.length?' '+buff.join(' '):'')+'</span><b>'+fmt(S.qi)+'</b></div>'+
    '<div class="it"><span>'+moneyName()+'</span><b>'+fmtMoney(S.stones)+'</b></div>'+
@@ -2061,7 +2137,7 @@ function renderWugong(){
     else if(g.src==='sect')act='<span class="tag rank">贡献阁兑换</span>';
     else if(g.floor)act='<span class="tag no">九星塔 · 第 '+g.floor+' 层</span>';
     else act='<button class="btn'+(locked?' ghost':'')+'" '+(locked?'disabled':'')+' onclick="buyGf(\''+g.id+'\')">'+fmtMoney(g.price||0)+' '+moneyName()+'</button>';
-    return '<div class="row-item"><div class="info"><div class="nm">'+g.name+'<span class="tag">'+(SK_TIER[g.tier-1]||'')+'</span>'+(own?'<span class="tag rank">已修</span>':'')+(on?'<span class="tag">运功中</span>':'')+(locked&&!own?'<span class="tag no">需 '+REALMS[g.reqR].name+'</span>':'')+'</div>'+
+    return '<div class="row-item"><div class="info"><div class="nm">'+g.name+'<span class="tag">'+(SK_TIER[g.tier-1]||'')+'</span>'+(g.kind==='body'?'<span class="tag rank">练体</span>':'')+(own?'<span class="tag rank">已修</span>':'')+(on?'<span class="tag">运功中</span>':'')+(locked&&!own?'<span class="tag no">需 '+REALMS[g.reqR].name+'</span>':'')+'</div>'+
      '<div class="small muted">'+g.d+'</div>'+
      '<div class="small">加成：'+gfFxTxt(g.fx)+'</div></div>'+
      '<div>'+act+'</div></div>';
@@ -2117,6 +2193,54 @@ function renderSect(){
    '<hr class="hr"><h3>贡献阁 <span class="small muted">（贡献 '+S.sect.contrib+'）</span></h3>'+shop+
    '<p class="small muted">分宗藏经独一份：玄天罡气诀、玄天十三剑、玄天道经、玄天镇狱拳——皆以贡献兑换，他处无售。</p>'+
    '</div></div>';
+}
+/* ---------------- 练体页：肉身九秘 + 人物属性 ---------------- */
+function renderBody(){
+  const st=heroStats(),sec=st.sec;
+  const cur=bodyCur();
+  const rows=BODY_STAGES.map((sg,i)=>{
+    const lv=(S.body.lv[i]||0),done=lv>=BODY_MAX_LV,active=cur&&cur.i===i;
+    let inner='';
+    if(active){
+      const cost=bodyCostNow();
+      inner='<div class="small muted">下一重需：灵气 '+fmt(cost.qi)+' ｜ '+moneyName()+' '+fmtMoney(cost.st)+(cost.sh?' ｜ 兽核 '+cost.sh+' 枚':'')+'（不耗行动点）</div>'+
+       '<button class="btn big" onclick="temperBody()">'+sg.n+' · 淬炼第 '+cnL(lv+1)+' 重</button>';
+    }
+    return '<div class="row-item"><div class="info"><div class="nm">'+sg.st+' · '+sg.n+
+     (done?'<span class="tag rank">十重圆满</span>':(active?'<span class="tag">淬炼中 · 第 '+cnL(lv)+' 重</span>':'<span class="tag no">待前置</span>'))+'</div>'+
+     '<div class="small muted">'+sg.d+'</div>'+(active?inner:'')+'</div></div>';
+  }).join('');
+  const btRows=GONGFAS.filter(g=>g.kind==='body').sort((a,b)=>a.tier-b.tier).map(g=>{
+    const own=!!S.gf.own[g.id],on=S.gf.on.indexOf(g.id)>=0;
+    const locked=!own&&(g.reqR||0)>curR();
+    let act='';
+    if(own)act='<button class="btn'+(on?' ghost':'')+'" onclick="equipGf(\''+g.id+'\')">'+(on?'收功':'运功')+'</button>';
+    else if(g.src==='sect')act='<span class="tag rank">贡献阁兑换</span>';
+    else act='<button class="btn'+(locked?' ghost':'')+'" '+(locked?'disabled':'')+' onclick="buyGf(\''+g.id+'\')">'+fmtMoney(g.price||0)+' '+moneyName()+'</button>';
+    return '<div class="row-item"><div class="info"><div class="nm">'+g.name+'<span class="tag">'+(SK_TIER[g.tier-1]||'')+'</span>'+(own?'<span class="tag rank">已修</span>':'')+(on?'<span class="tag">运功中</span>':'')+(locked&&!own?'<span class="tag no">需 '+REALMS[g.reqR].name+'</span>':'')+'</div>'+
+     '<div class="small muted">'+g.d+'</div><div class="small">加成：'+gfFxTxt(g.fx)+'</div></div>'+
+     '<div>'+act+'</div></div>';
+  }).join('');
+  const spdPct=Math.min(25,sec.spd*2.5);
+  const statIt=(k,v,d)=>'<div class="row-item"><div class="info"><div class="nm">'+k+'</div><div class="small muted">'+d+'</div></div><div><b class="gold">'+v+'</b></div></div>';
+  const statPanel='<div class="panel"><h3>人物属性 · 八维战体系</h3>'+
+   statIt('攻击 / 防御 / 气血',fmt(st.atk)+' / '+fmt(st.def)+' / '+fmt(st.hp),'根基三围：受攻击、防御、气血全加成放大')+
+   statIt('暴击 / 暴伤',Math.round(sec.crit*100)+'% / x'+sec.cdmg.toFixed(2),'通髓所开：暴击时伤害成倍迸发')+
+   statIt('闪避',Math.round(sec.dodge*100)+'%','开窍所化：身形难测，避开敌方扑击')+
+   statIt('吸血',Math.round(sec.leech*100)+'%','沸血所养：伤敌一分，自愈一分')+
+   statIt('速度',sec.spd.toFixed(0)+'（追击 '+spdPct+'%）','伸筋所伸：身法快到极致可追击一记')+
+   statIt('穿透',Math.round(sec.pen*100)+'%','罡气所至：无视敌方部分防御')+
+   statIt('再生',Math.round(sec.regen*100)+'% / 回合','洗脏所得：五脏如鼎，气血自生')+
+   statIt('反震',Math.round(sec.thorns*100)+'%','罡气所震：受击反噬敌人')+
+   '</div>';
+  $('main').innerHTML='<div class="grid2">'+
+   statPanel+
+   '<div><div class="panel"><h3>肉身九秘 · 淬体（'+bodyTotal()+' / 90 重）</h3>'+
+   '<p class="small muted">外炼筋骨皮，内炼脏髓血窍罡——九秘依序而开，每秘十重。淬体耗灵气与'+moneyName()+'（四秘「脏」之后另耗兽核），不耗行动点；练体所得的攻防气血与八维属性，永久生效。</p>'+
+   rows+'</div>'+
+   '<div class="panel"><h3>练体功法（外炼之学 · 可与内功同修）</h3>'+btRows+
+   '<p class="small muted">练体功法入运功槽即生效，与内功并用；玄罡不坏体为玄天道宗秘藏，分宗贡献阁有售。</p></div></div>'+
+   '</div>';
 }
 /* ---------------- 每日悬赏面板 / 九星塔页 / 图鉴页 ---------------- */
 function dailyPanelHtml(){
@@ -2237,6 +2361,7 @@ function renderAll(){
   else if(curTab==='tower')renderTower();
   else if(curTab==='wugong')renderWugong();
   else if(curTab==='sect')renderSect();
+  else if(curTab==='body')renderBody();
   else if(curTab==='codex')renderCodex();
   else if(curTab==='stars')renderStars();
   else if(curTab==='realms')renderRealms();

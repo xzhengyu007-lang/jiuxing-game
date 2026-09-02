@@ -480,9 +480,9 @@ curTab='codex';renderAll();
 curTab='realms';renderAll();
 /* ========== 阶段六：玄天道宗 · 一百零八分宗 ========== */
 assert(SECT_TITLES.length===5,'职位应五级');
-assert(SECT_SHOP.length===10,'贡献阁应十项');
+assert(SECT_SHOP.length===11,'贡献阁应十一项');
 assert(SKILLS.filter(s=>s.src==='sect').length===2,'宗门战技应2式');
-assert(GONGFAS.filter(g=>g.src==='sect').length===2,'宗门功法应2部');
+assert(GONGFAS.filter(g=>g.src==='sect').length===3,'宗门功法应3部');
 assert(sectEnemyR(108)===1&&sectEnemyR(1)===6,'守擂弟子境界应凝血升至辟海封顶');
 assert(sectEnemyR(58)===3,'守擂境界应中段取整');
 assert(QUESTS.some(q=>q.id==='tianzong'),'应有拜入玄天道宗剧情');
@@ -527,7 +527,50 @@ checkAch();
 assert(S.ach.a_sc1===1&&S.ach.a_sc10===1&&S.ach.a_sc50===1,'爬升成就应达成');
 assert(S.ach.a_sct===1,'真传成就应达成');
 curTab='sect';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·212功法·武功阁·宗门爬榜 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
+/* ========== 阶段七：练体 · 肉身九秘 / 八维属性 / 练体功法 ========== */
+assert(BODY_STAGES.length===9,'应有九秘');
+assert(BODY_STAGES.map(s=>s.st).join('')==='皮肉筋骨脏髓血窍罡','九秘顺序应为皮肉筋骨脏髓血窍罡');
+assert(GONGFAS.filter(g=>g.kind==='body').length===8,'练体功法应有8部');
+assert(bodyFx('atk')===0&&bodyFx('crit')===0,'未练体时副属性应为0');
+S.stones=1e9;S.qi=1e30;
+temperBody();
+assert((S.body.lv[0])===1,'淬皮第一重应成');
+assert(Math.abs(bodyFx('def')-0.02)<1e-9,'淬皮应给防御2%');
+for(let k=0;k<9;k++)temperBody();
+assert(S.body.lv[0]===10&&S.body.li===1,'淬皮十重后应进锻肉');
+assert(Math.abs(bodyFx('def')-0.2)<1e-9,'十重淬皮应防御+20%');
+S.body.lv=[10,10,10,10,10,10,10,10,10];S.body.li=9;
+assert(bodyTotal()===90,'九秘俱通应90重');
+assert(Math.abs(bodyFx('crit')-0.2)<1e-9,'通髓应暴击20%');
+assert(Math.abs(bodyFx('spd')-10)<1e-9,'伸筋应速度10');
+const bst0=heroStats();
+assert(bst0.sec&&bst0.sec.cdmg>1.6,'通髓十重应抬暴伤倍率, 实际 '+bst0.sec.cdmg);
+assert(Math.abs(bst0.sec.spd-10)<1e-6,'速度应10');
+// 练体功法：拥有/运功/属性生效
+while(S.gf.on.length)equipGf(S.gf.on[0]); // 收功归零，回归裸体基准
+const bbase=heroStats();
+grantGf('bt1');
+assert(S.gf.on.indexOf('bt1')>=0,'铁皮功应自动运功');
+assert(gfFx('dodge')>0&&gfFx('def')>0,'铁皮功应给闪避与防御');
+const bdef1=heroStats().def;
+assert(bdef1>bbase.def*1.1,'练体功法应放大防御, '+bdef1+' vs '+bbase.def);
+grantGf('bt5');
+assert(S.gf.on.indexOf('bt5')>=0,'通髓贯神篇应自动运功');
+assert(gfFx('cdmg')>0&&gfFx('crit')>0,'通髓贯神篇应给暴击暴伤');
+assert(Math.abs(heroStats().sec.crit-Math.min(0.6,0.2+0.08))<1e-9,'暴击应叠至28%');
+// 战斗内：八维生效
+S.ap=99;
+startBattle('fengming',0);
+assert(B&&B.sec&&B.sec.spd===10,'战斗应携带速度10');
+let btn7=0;while(B&&!B.over&&btn7++<900)basicAttack();
+assert(B&&B.over,'战斗应结束');
+B=null;
+// 登顶成就 + 页面冒烟
+checkAch();
+assert(S.ach.a_body===1,'肉身九秘成就应达成');
+curTab='body';renderAll();
+curTab='wugong';renderAll();
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2010灵植 / 618丹方 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
