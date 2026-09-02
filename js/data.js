@@ -165,7 +165,35 @@ const STARS=[
   d:'涅冲主轮回：战斗与采药所得 +50%，置之死地而后生。'},
  {name:'镇道星',alias:'万古',    fx:'all',  fxV:0.50,reqR:11,qiMul:400, stones:180e4,
   d:'镇道为九星之首：全属性 +50%、修炼速度再 +25%，一星镇万道。'},
-];;
+];
+
+/* ---------- 凝星丹：九星各有专属丹药，六等品阶（普通/上品/特品/完美/神丹/巨丹） ---------- */
+const STAR_PILL_Q=[
+ {s:'普通',m:1},{s:'上品',m:2},{s:'特品',m:3.5},{s:'完美',m:6},{s:'神丹',m:10},{s:'巨丹',m:18}
+];
+/* 凝星十三重（九星共此进阶之路，每星各自凝炼） */
+const STAR_STAGES=['星尘初聚','微芒始现','星火一点','星核初成','星环初绕','星纹天成','星魄内凝','星辉灌体','星海映身','星冕加顶','星劫淬真','星光通明','星汉圆满'];
+/* 凝至第 k+1 重所需星丹品阶（0普通 1上品 2特品 3完美 4神丹 5巨丹） */
+const STAR_STAGE_Q=[0,0,1,1,1,2,2,2,3,3,4,4,5];
+(function(){
+  for(let i=0;i<STARS.length;i++){
+    const st=STARS[i];
+    for(let q=0;q<STAR_PILL_Q.length;q++){
+      const Q=STAR_PILL_Q[q],need=[];
+      for(let k=0;k<STAR_STAGE_Q.length;k++)if(STAR_STAGE_Q[k]===q)need.push(CN_NUM[k+1]);
+      PILLS['star'+i+'_'+q]={n:(q?Q.s+'·':'')+st.name+'丹',f:'star',t:Math.min(10,st.reqR+1),m:Q.m,
+        d:'凝星之丹（'+Q.s+'）：凝聚或进阶【'+st.name+'】（'+st.alias+'）——第'+need.join('、')+'重需此品阶，更高品阶可代用。请于九星页使用，不可直接服用。'};
+    }
+  }
+})();
+/* 凝星丹方：品阶随机，丹道越高越易出高品 */
+(function(){
+  for(let i=0;i<STARS.length;i++){
+    const st=STARS[i],t1=Math.min(8,i)+1;
+    RECIPES.push({id:'r_star'+i,out:'star'+i+'_0',starRoll:i,rank:Math.min(9,i),reqR:st.reqR,
+      matsGE:[{t:t1,n:6+i},{t:Math.min(10,t1+1),n:3+i}],shouhe:2+i,exp:60+i*40});
+  }
+})();
 
 /* ---------- 神火之种属性（原著：金木水火土风雷光暗魂……） ---------- */
 const FIRE_SEEDS=['金','木','水','火','土','风','雷','光','暗','魂'];
@@ -365,6 +393,8 @@ const ACHS=[
  {id:'a_day100',n:'百日筑基', kind:'days',v:100, rw:{stones:3e4},            d:'度过 100 日。'},
  {id:'a_q1k',  n:'日进斗金', kind:'qiTotal',v:100000,rw:{stones:1e4},         d:'累计获得修为 10 万。'},
  {id:'a_q1m',  n:'修为等身', kind:'qiTotal',v:1e6, rw:{stones:10e4},           d:'累计获得修为 100 万。'},
+ {id:'a_st9',  n:'凝星九重', kind:'stage', v:9,   rw:{stones:8e4},             d:'任一星秘藏凝至第九重。'},
+ {id:'a_st13', n:'星汉圆满', kind:'stage', v:13,  rw:{stones:30e4,ap:10},      d:'任一星秘藏凝至十三重「星汉圆满」。'},
 ];
 
 /* ---------- 每日悬赏（按天数确定性生成 3 条，次日刷新） ---------- */
