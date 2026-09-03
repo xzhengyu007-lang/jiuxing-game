@@ -50,6 +50,7 @@ function newState(){
     sect:{rank:108,contrib:0,title:0,wins:0,spars:0,day:0,qs:[],prog:[],done:[],cnt:[],rw:[]},
     body:{li:0,lv:[0,0,0,0,0,0,0,0,0]},
     soc:{roster:[],dualBoost:0}, gifts:{},
+    soul:{exp:0,gfs:{}}, flames:{}, natal:null, furnace:0, pearlAlch:{rid:'',day:0,used:0,auto:0},
   };
 }
 function save(){ if(!S)return; S.lastTick=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
@@ -170,7 +171,7 @@ function heroStats(){
   let hp=(80+20*l)*Math.pow(2.1,r);
   let atk=(10+3*l)*Math.pow(2.0,r);
   let def=(5+1.5*l)*Math.pow(2.0,r);
-  const extra=(1+0.05*S.bones)*(1+0.18*starCnt())*(1+0.03*S.xiusui)*(1+S.flags.sijie)*(0.5+0.5*S.cond/100);
+  const extra=(1+0.05*S.bones)*(1+0.18*starCnt())*(1+0.03*S.xiusui)*(1+S.flags.sijie)*(0.5+0.5*S.cond/100)*(1+0.04*soulRankIdx()+soulGfFx('all'));
   hp*=extra;atk*=extra;def*=extra;
   hp*=(1+(S.perm.hp||0)/100);atk*=(1+(S.perm.atk||0)/100);def*=(1+(S.perm.def||0)/100);
   if(S.flags.mingxing){hp*=1.1;atk*=1.1;def*=1.1;}
@@ -551,6 +552,8 @@ function craft(rid,n){ // 炼丹：n=连炼炉数（1/10/100）——材料一�
   const myRank=danRankIdx();
   if(myRank<rc.rank){toast('丹修位阶不足：需 '+DAN_RANKS[rc.rank]+'（当前 '+DAN_RANKS[myRank]+'）');return;}
   if((rc.reqR||0)>curR()){toast('修为不足：此丹方需 '+REALMS[rc.reqR].name+'方可参悟');return;}
+  const fg=fireGate(rid);
+  if(fg){toast(fg);return;}
   const need={h:{},c:0}; // n 炉材料总账（'geT' 键表示 ≥T 品灵植）
   if(rc.matsGE){for(const sp of rc.matsGE)need.h['ge'+sp.t]=(need.h['ge'+sp.t]||0)+sp.n*n;need.c=(rc.shouhe||0)*n;}
   else for(const m in rc.mats){if(m==='shouhe')need.c+=rc.mats[m]*n;else need.h[m]=(need.h[m]||0)+rc.mats[m]*n;}
@@ -566,7 +569,7 @@ function craft(rid,n){ // 炼丹：n=连炼炉数（1/10/100）——材料一�
     else S.herbs[k]-=need.h[k];
   }
   if(need.c)S.mats.shouhe-=need.c;
-  const p=clamp(0.62+0.07*(myRank-rc.rank),0.15,0.95);
+  const p=clamp(0.62+0.07*(myRank-rc.rank)+Math.min(0.1,fireBonus()*0.02),0.15,0.95);
   let made=0;const got={};
   for(let i=0;i<n;i++){
     if(Math.random()<p){
@@ -795,6 +798,7 @@ function skillOk(sk){
   if(sk.req.eq){const e=EQ[sk.req.eq];if(S.wearing[e.slot]!==sk.req.eq)return false;}
   if(sk.req.stars&&starCnt()<sk.req.stars)return false;
   if(sk.req.realm&&curR()<sk.req.realm)return false;
+  if(sk.req.soul&&soulRankIdx()<sk.req.soul)return false;
   return true;
 }
 function useSkill(sid){
@@ -813,6 +817,7 @@ function useSkill(sid){
   const pen=(B.sec&&B.sec.pen)||0;
   let dmg;
   if(sk.effect==='stun'){dmg=Math.max(B.patk*mult*rnd(0.9,1.15),B.patk*0.2);} // 黑锅：无视防御
+  else if(sk.effect==='soul'){dmg=Math.max(B.patk*mult*rnd(0.9,1.15)*(1+soulAtkFx()),B.patk*0.15);} // 魂修：神魂攻伐，无视防御
   else dmg=Math.max(B.patk*mult*rnd(0.9,1.15)-B.edef*0.55*(1-pen),B.patk*0.12);
   dmg=Math.floor(dmg);
   let crit=false;
@@ -899,7 +904,7 @@ function winBattle(){
   S.stones+=stones;
   let drops=moneyName()+' x'+fmtMoney(stones);
   if(ed.r>=2&&Math.random()<Math.min(0.95,0.55*dropMul)){S.mats.shouhe=(S.mats.shouhe||0)+1;drops+='，兽核 x1';}
-  drops+=dropLoot(ed,dropMul);
+  drops+=dropLoot(ed,dropMul);maybeFlameDrop(ed.r);
   if(Math.random()<Math.min(0.95,0.35*dropMul)){
     const h=z?dropHerb(z):randHerbTier(Math.max(1,ed.r-1),Math.min(12,ed.r+1));
     S.herbs[h]=(S.herbs[h]||0)+1;drops+='，'+HERBS[h].n+' x1';
@@ -1031,7 +1036,7 @@ function doEvent(z){
 /* ---------------- 九星秘藏：凝星丹与凝星十三重 ---------------- */
 function starPillId(i,q){return 'star'+i+'_'+q;}
 function rollStarQ(rank){ // 凝星丹品阶随机：丹道越高、紫阙星/丹心诀加持，越易出高品
-  const b=starFx('craft')+gfFx('craft');
+  const b=starFx('craft')+gfFx('craft')+Math.min(0.4,fireBonus()*0.3);
   const r=Math.random();
   if(r<0.004+0.0004*rank)return 5;   // 巨丹
   if(r<0.015+0.0012*rank)return 4;   // 神丹
@@ -1622,6 +1627,7 @@ function nextDay(){
     (outTxt.length?('　灵兽产出：'+outTxt.join('、')):'')+
     (ready?('　有 '+ready+' 株灵植已然成熟。'):''));
   if(S.cond<40)log('bad','状态萎靡——修炼缓慢、战力打折。多植神树、及早浇灌，方能日日精进。');
+  pearlDaily();
   ensureDaily();
   checkQuests();renderAll();save();
 }
@@ -1659,6 +1665,7 @@ const TABS=[
  {id:'sect',n:'宗门'},
  {id:'body',n:'练体'},
  {id:'soc',n:'红尘'},
+ {id:'soulfire',n:'魂火'},
  {id:'codex',n:'图鉴'},
  {id:'stars',n:'九星'},
  {id:'realms',n:'境界'},
@@ -1680,7 +1687,7 @@ function renderTop(){
   $('topbar').innerHTML=
    '<div><div class="tb-name">龙尘</div>'+
    '<div class="tb-realm">'+realmTxt()+' <span class="tb-sub">· '+REALMS[curR()].tier+(REALMS[curR()].who?' · '+REALMS[curR()].who:'')+'</span></div>'+
-   '<div class="tb-sub">第 '+S.day+' 日 ｜ 战力 '+fmt(st.atk*10+st.hp/10+(S.bones*50)+bodyTotal()*30)+' ｜ 祭骨 '+S.bones+' 根 ｜ 练体 '+bodyTotal()+'/90 重 ｜ 九星 '+starCnt()+'/9 ｜ 丹修 '+DAN_RANKS[danRankIdx()]+'</div></div>'+
+   '<div class="tb-sub">第 '+S.day+' 日 ｜ 战力 '+fmt(st.atk*10+st.hp/10+(S.bones*50)+bodyTotal()*30)+' ｜ 祭骨 '+S.bones+' 根 ｜ 练体 '+bodyTotal()+'/90 重 ｜ 九星 '+starCnt()+'/9 ｜ 丹修 '+DAN_RANKS[danRankIdx()]+' ｜ 魂力 '+fmt((S.soul&&S.soul.exp)||0)+'（'+soulRankName()+'）</div></div>'+
    '<div class="res">'+
    '<div class="it"><span>灵气'+(buff.length?' '+buff.join(' '):'')+'</span><b>'+fmt(S.qi)+'</b></div>'+
    '<div class="it"><span>'+moneyName()+'</span><b>'+fmtMoney(S.stones)+'</b></div>'+
@@ -2428,6 +2435,7 @@ function renderAll(){
   else if(curTab==='sect')renderSect();
   else if(curTab==='body')renderBody();
   else if(curTab==='soc')renderSoc();
+  else if(curTab==='soulfire')renderSoulfire();
   else if(curTab==='codex')renderCodex();
   else if(curTab==='stars')renderStars();
   else if(curTab==='realms')renderRealms();
