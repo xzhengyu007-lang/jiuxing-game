@@ -1,4 +1,27 @@
 'use strict';
+/* ---------- 地图名产落名：每幅地图都有确定的具名灵植名产池（采药掉具体名字） ---------- */
+(function(){
+  function h32z(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*16777619)>>>0;}return h;}
+  ZONES.forEach(function(z){
+    var h=h32z(z.id||z.name),have=z.herbs||(z.herbs=[]);
+    var lo=z.ht?Math.max(1,z.ht[0]):Math.max(1,Math.min(10,z.reqR||0));
+    var hi=z.ht?z.ht[1]:Math.min(10,(z.reqR||0)+2);
+    for(var t=lo;t<=hi;t++){
+      var pool=HERBS_BY_TIER[t]||[];
+      if(!pool.length)continue;
+      var k=pool[(h+t*104729)%pool.length];
+      if(have.indexOf(k)<0)have.push(k);
+    }
+    var guard=0; /* 高境界名产层收窄时，从最高层池再取足五个名字 */
+    while(have.length<5&&guard++<40){
+      var p2=HERBS_BY_TIER[hi]||HERBS_BY_TIER[lo]||[];
+      if(!p2.length)break;
+      var k2=p2[(h+have.length*7919+guard*104729)%p2.length];
+      if(have.indexOf(k2)<0)have.push(k2);
+    }
+  });
+})();
+
 /* ============================================================
  * 九星霸体诀 · 修仙 —— 魂修 · 丹火 · 丹炉 数据（data3）
  *  - 灵魂之力：魂阶八重（淬魂→神魂），魂修功法六部，魂修战技八式

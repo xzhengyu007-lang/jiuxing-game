@@ -276,9 +276,9 @@ function randHerbTier(lo,hi){ // 掉落一株区间内随机灵植
   const arr=HERBS_BY_TIER[t];
   return arr[irnd(0,arr.length-1)];
 }
-/* 地图灵植掉落：有名产地出固定名产，无名的荒野新图按品阶区间随机 */
+/* 地图灵植掉落：七成出自本图具名名产，三成拾得野生灵植（按品阶区间随机具名） */
 function dropHerb(z){
-  if(z.herbs&&z.herbs.length)return pick(z.herbs);
+  if(z.herbs&&z.herbs.length&&Math.random()<0.7)return pick(z.herbs);
   return randHerbTier(z.ht?z.ht[0]:1,z.ht?z.ht[1]:3);
 }
 function bestPillOf(fam){ // 拥有的最强某系丹药 id
@@ -1846,7 +1846,7 @@ function zoneCard(z){
   const cdLeft=Math.max(0,Math.ceil((cd-Date.now())/1000));
   const ht0=(z.ht&&z.ht[0])||1, ht1=(z.ht&&z.ht[1])||Math.max(2,curR()+2);
   const herbTxt=z.herbs&&z.herbs.length
-    ?(z.herbs.map(h=>HERBS[h].n).join('、')+'，另有'+ht0+'–'+ht1+'品灵植')
+    ?('名产 '+z.herbs.map(h=>HERBS[h].n).join('、')+'，兼有野生 '+ht0+'–'+ht1+' 品灵植')
     :('可得 '+ht0+'–'+ht1+' 品灵植');
   return '<div class="zone"><h4>'+z.name+'</h4><p class="small muted">'+z.d+'</p>'+
    z.enemies.map((e,i)=>{

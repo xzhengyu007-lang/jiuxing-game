@@ -89,9 +89,9 @@ Math.random=realRandom;
 
 /* —— 采药 —— */
 S.expCd={};S.ap=999;
-const h0=S.herbs.lingcao||0;
+const h0=Object.values(S.herbs).reduce((a,b)=>a+(b||0),0);
 explore('fengming');
-assert((S.herbs.lingcao||0)>h0,'采药应获得灵草');
+assert(Object.values(S.herbs).reduce((a,b)=>a+(b||0),0)>h0,'采药应获得具名灵植');
 
 /* ========== 阶段二：日程 / 混沌珠 / 华云商行 ========== */
 S=newState();
@@ -212,6 +212,16 @@ for(let r=0;r<REALMS.length;r++){
   assert(n===2,'每境界应恰有2幅可选地图: r='+r+' 实际 '+n);
 }
 assert(new Set(Object.keys(HERBS)).size===Object.keys(HERBS).length,'灵植 id 应无重复');
+/* —— 地图名产落名：每图具名名产池，采药掉具体名字 —— */
+assert(ZONES.every(z=>(z.herbs||[]).length>=3),'每图应有具名名产池, 实际最短 '+(ZONES.map(z=>(z.herbs||[]).length).sort((a,b)=>a-b)[0]));
+assert(ZONES.every(z=>z.herbs.every(h=>HERBS[h])),'名产应可解析到具名灵植');
+assert(ZONES.every(z=>new Set(z.herbs).size===z.herbs.length),'名产池内不应重复');
+const mpz=ZONES.find(z=>z.id==='fengming');
+assert(mpz.herbs[0]==='lingcao','原地名产应保留签名灵草');
+Math.random=()=>0.01; /* <0.7 必出名产（阶段三固定随机延续） */
+S.expCd={};S.ap=99;
+explore(mpz.id);
+assert(Object.keys(S.herbs).some(id=>mpz.herbs.indexOf(id)>=0&&(S.herbs[id]||0)>0),'采药应掉本图名产');
 for(const rc of RECIPES){
   assert(DAN_RANKS[rc.rank]!==undefined,'丹方位阶应合法: '+rc.id);
   assert((rc.reqR||0)<=21,'丹方境界需求应合法: '+rc.id);
