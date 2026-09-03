@@ -2366,6 +2366,14 @@ function dailyPanelHtml(){
   return '<div class="panel"><h3>每日悬赏（第 '+D.day+' 日）</h3>'+
    '<p class="small muted">凤鸣城悬赏榜每日张榜三条，日落而息后换榜。</p>'+rows+'</div>';
 }
+function gfSrcTag(g){ // 功法来源标签（无 floor 的非塔层功法不再显示「第undefined层」）
+  if(g.floor)return '<span class="tag no">第 '+g.floor+' 层</span>';
+  if(g.src==='quest')return '<span class="tag rank">剧情传承</span>';
+  if(g.src==='sect')return '<span class="tag rank">贡献阁兑换</span>';
+  if(g.kind==='body')return '<span class="tag rank">练体功法</span>';
+  if(g.price)return '<span class="tag">传功阁有售</span>';
+  return '';
+}
 function renderTower(){
   const f=(S.towerBest||0)+1;
   const ed=towerFloorEnemy(f);
@@ -2382,7 +2390,7 @@ function renderTower(){
    GONGFAS.map(g=>{
      const own=!!S.gf.own[g.id],on=S.gf.on.indexOf(g.id)>=0;
      return '<div class="row-item"><div class="info"><div class="nm">'+g.name+
-      (own?'<span class="tag rank">已习</span>':'<span class="tag no">第 '+g.floor+' 层</span>')+(on?'<span class="tag">运功中</span>':'')+'</div>'+
+      (own?'<span class="tag rank">已习</span>':gfSrcTag(g))+(on?'<span class="tag">运功中</span>':'')+'</div>'+
       '<div class="small muted">'+g.d+'</div></div>'+
       (own?'<button class="btn'+(on?' ghost':'')+'" onclick="equipGf(\''+g.id+'\')">'+(on?'收功':'运功')+'</button>':'')+'</div>';
    }).join('')+
