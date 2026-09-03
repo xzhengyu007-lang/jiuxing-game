@@ -32,9 +32,29 @@
     <script src="js/mijing.js"></script>
 <script src="js/game.js"></script>
 <script>
-/* PWA：仅在 HTTPS（或本机）环境下注册离线缓存 */
+/* PWA：仅在 HTTPS（或本机）环境下注册离线缓存。
+ * 新版本检测：sw.js 更新检查绕过 HTTP 缓存（updateViaCache:'none'，免受 GitHub Pages 十分钟缓存拖延）；
+ * 检测到新 SW 接管（controllerchange）时自动刷新一次页面，让新代码立即生效——
+ * 战斗/弹窗/输入中不打断，等回到安全时机再刷；手机 PWA 常驻后台回来（visibilitychange）也主动查一次更新。 */
 if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){
-  addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  var jxHadSW=!!navigator.serviceWorker.controller, jxUpgraded=false;
+  addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){
+      setInterval(function(){ try{reg.update();}catch(e){} },30*60*1000);
+    }).catch(function(){});
+    navigator.serviceWorker.addEventListener('controllerchange',function(){
+      if(!jxHadSW||jxUpgraded)return; /* 首次安装不算更新；同一次更新只刷一遍 */
+      jxUpgraded=true;
+      var wait=setInterval(function(){
+        if(typeof safeToReload!=='function'||safeToReload()){ clearInterval(wait); location.reload(); }
+      },1500);
+      /* 战斗若长时间不结束，十分钟封顶，避免无限等待 */
+      setTimeout(function(){clearInterval(wait);location.reload();},10*60*1000);
+    });
+    document.addEventListener('visibilitychange',function(){
+      if(document.visibilityState==='visible') navigator.serviceWorker.getRegistration().then(function(r){ if(r)try{r.update();}catch(e){} }).catch(function(){});
+    });
+  });
 }
 </script>
 </body>

@@ -2463,7 +2463,12 @@ function openSettings(){
    '<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">'+
    '<button class="btn" onclick="copySave()">复制存档码</button>'+
    '<button class="btn jade" onclick="importSave()">导入存档码</button></div>'+
-   '<div id="saveMsg" class="small jade" style="margin-top:6px"></div>');
+   '<div id="saveMsg" class="small jade" style="margin-top:6px"></div>'+
+   '<div id="swVer" class="small muted" style="margin-top:6px"></div>');
+  if(window.caches&&caches.keys)caches.keys().then(function(ks){
+    const v=ks.filter(function(k){return k.indexOf('jsxing-')===0;}).sort().pop();
+    const m=$('swVer');if(m&&v)m.textContent='当前缓存版本：'+v+'（更新代码后打开游戏会自动换新，无需清缓存）';
+  }).catch(function(){});
 }
 function copySave(){
   const ta=$('saveArea');if(!ta)return;
@@ -2516,6 +2521,8 @@ function formBusy(){
   const ae=document.activeElement;
   return !!(ae&&(ae.tagName==='SELECT'||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'));
 }
+/* 新版本自动刷新的安全时机：无战斗、无特殊弹窗流程、无正在输入/下拉 */
+function safeToReload(){return !B&&!P&&!formBusy();}
 
 /* ---------------- 主循环 ---------------- */
 let lastLoop=Date.now();
