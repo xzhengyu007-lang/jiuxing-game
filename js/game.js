@@ -38,7 +38,7 @@ function newState(){
     flags:{intro:0,gumu:0,siguo:0,sect:0,pearl:0,fireSeed:null,sijie:0,mingxing:0,won:0,ascend:0},
     buffs:{julingUntil:0,qps:null},
     autobreak:0, usePojing:1, speed:1,
-    day:1, ap:22, cond:100,
+    day:1, ap:22, cond:100, cnd:{r:-1,l:-1,n:0},
     pearl:{plants:[],trees:[],beasts:[]},
     expCd:{}, logs:[], lastTick:Date.now(),
     qiToday:0,
@@ -354,8 +354,43 @@ function openIntro(){
    '<p class="small muted">玩法：打坐积攒灵气 → 冲击境界（后天五境 → 先天八境 → 仙道诸境）→ 炼丹辅助修行 → 历练斩妖夺宝 → 开启九星。'+
    '日子一天天过：每日行动点有限（出战2 · 采药1 · 炼丹1 · 种植1……），没事做了就「日落而息」进入下一日，状态恢复、灵植生长。'+
    '凝血境后可得至宝<b class="gold">混沌珠</b>：空间无边无际，可种丹药材料、植混沌神树（回复状态，枯萎则回复缓慢）、养灵兽。'+
-   '多余物件皆可在<b class="gold">华云商行</b>买卖。锻骨境要拼财力祭炼骨骼，璇丹境天劫只有一次机会，四极境须在一炷香内抓取符文……手握乾坤，脚踏星辰，从今日始。</p>'+
+   '多余物件皆可在<b class="gold">华云商行</b>买卖。锻骨境要拼财力祭炼骨骼，璇丹境天劫只有一次机会，四极境须在一炷香内抓取符文，而每一境更有关窍凝聚之苦功（聚气凝气旋、辟海辟海眼、命星摘星辉……）……手握乾坤，脚踏星辰，从今日始。</p>'+
    '<div style="text-align:center;margin-top:14px"><button class="btn big" onclick="startGame()">开始修行</button></div>');
+}
+
+/* ---------------- 关窍凝聚（每境每层额外修炼） ----------------
+ * 各境专属凝聚物：每层须先凝聚足数方可冲击；已有专属机制的境界不设（锻骨祭骨/璇丹凝神丹/通冥生死/神火神火引/四极择符）。 */
+const CONDENSE={
+  0:{u:'气旋',n:13,d:'凝气成旋'},
+  1:{u:'血纹',n:11,d:'凝血成纹'},
+  2:{u:'筋缕',n:11,d:'抽筋续缕'},
+  4:{u:'窍穴',n:13,d:'开辟窍穴'},
+  5:{u:'道基',n:11,d:'夯筑道基'},
+  6:{u:'海眼',n:11,d:'辟海成眼'},
+  7:{u:'台基',n:13,d:'铸台筑基'},
+  9:{u:'神念',n:11,d:'分化神念'},
+  10:{u:'星辉',n:13,d:'摘星铸辉'},
+  12:{u:'天力',n:11,d:'承接天力'},
+  13:{u:'凡蜕',n:11,d:'蜕尽凡尘'},
+  16:{u:'君威',n:11,d:'凝聚君威'},
+  17:{u:'王座',n:13,d:'铸就王座'},
+  18:{u:'界纹',n:13,d:'刻画界纹'},
+  19:{u:'尊印',n:11,d:'铸造尊印'},
+  20:{u:'不朽痕',n:13,d:'铭刻不朽'},
+  21:{u:'皇玺',n:13,d:'铸造皇玺'}
+};
+function cnd(){const r=curR(),l=curL();if(!S.cnd||S.cnd.r!==r||S.cnd.l!==l)S.cnd={r:r,l:l,n:0};return S.cnd;}
+function condCost(){return Math.ceil(layerCost()*0.32);}
+function condense(n){
+  const def=CONDENSE[curR()];
+  if(!def)return;
+  const c=cnd(),unit=condCost();
+  const want=(n==='all')?(def.n-c.n):Math.min(n||1,def.n-c.n);
+  let done=0;
+  while(done<want&&S.qi>=unit){S.qi-=unit;c.n++;done++;}
+  if(done>=1)toast('凝聚成功：'+def.u+' '+c.n+' / '+def.n+(c.n>=def.n?'（圆满，可冲击了）':''),'good');
+  else toast(S.qi<unit?'灵气不足，凝聚一道'+def.u+'需 '+fmt(unit):'本层'+def.u+'已圆满');
+  renderAll();
 }
 
 /* ---------------- 境界突破 ---------------- */
@@ -366,6 +401,10 @@ function tryBreak(){
   if(S.qi<cost){toast('灵气不足，尚缺 '+fmt(cost-S.qi));return;}
   if(r===3&&S.bones<BONES_REQ[l]){
     toast('锻骨境：需累计祭炼 '+BONES_REQ[l]+' 根骨骼（当前 '+S.bones+'），吞服祭骨丹后点击「祭骨冲关」');return;
+  }
+  const cdef=CONDENSE[r];
+  if(cdef&&cnd().n<cdef.n){
+    toast(REALMS[r].name+cnL(l+1)+'层：需先'+cdef.d+'——凝聚'+cdef.u+' '+cnd().n+' / '+cdef.n+'，足数方可冲击');return;
   }
   const realmCross=(l===LAYER_CNT-1);
   let p=0.92-r*0.012-l*0.008;
@@ -1676,10 +1715,12 @@ function starWheelSvg(){
 }
 function renderCult(){
   const r=curR(),l=curL(),cost=layerCost();
-  const can=S.qi>=cost;
+  const cdef=CONDENSE[r],cndOk=!cdef||cnd().n>=cdef.n;
+  const can=S.qi>=cost&&cndOk;
   let breakBtnTxt='冲击 · '+REALMS[r].name+cnL(l+1)+'层';
   if(S.g>=MAXG())breakBtnTxt='已至圆满';
   else if(l===LAYER_CNT-1)breakBtnTxt='冲关 · 【'+REALMS[r+1].name+'】';
+  else if(!cndOk)breakBtnTxt='先凝聚'+cdef.u+'（'+cnd().n+' / '+cdef.n+'）';
   let boneHtml='';
   if(r===3){
     const need=BONES_REQ[l];
@@ -1688,6 +1729,16 @@ function renderCult(){
      '<p class="small muted">原著：四祭、八祭、十祭、十二祭、十六祭、全祭——唯有锻骨不靠天赋而靠财力。</p>'+
      '<div style="margin-top:8px"><button class="btn jade" onclick="refineBone()">祭骨冲关（消耗祭骨丹 x1）</button> '+
      '<span class="small muted">祭骨丹：'+(S.pills.jigu||0)+' 枚</span></div></div>';
+  }
+  let cndHtml='';
+  if(cdef){
+    const c=cnd(),unit=condCost(),full=c.n>=cdef.n;
+    cndHtml='<div class="panel"><h3>'+cdef.d+' · '+cdef.u+'（'+REALMS[r].name+'每层必修）</h3>'+
+     '<p class="small">本境每一层，须先以灵气凝聚 <b class="gold">'+cdef.n+'</b> 道<b class="jade">'+cdef.u+'</b>，足数方可冲击关隘；每道耗灵气 '+fmt(unit)+'。</p>'+
+     '<div class="bar" style="margin:8px 0"><i style="width:'+clamp(c.n/cdef.n*100,0,100)+'%"></i><span>'+cdef.u+' '+c.n+' / '+cdef.n+(full?' · 圆满，可冲击':'')+'</span></div>'+
+     '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn jade" onclick="condense(1)">凝聚一道（'+fmt(unit)+' 灵气）</button>'+
+     '<button class="btn" '+(full?'disabled':'')+' onclick="condense(99)">一键凝聚余下</button></div>'+
+     '<p class="small muted">「自动冲击」开启时也会自动凝聚。凝聚之属随层精进，破层后重新凝聚。</p></div>';
   }
   const qs=undoneQuests();
   $('main').innerHTML=
@@ -1719,7 +1770,7 @@ function renderCult(){
      '<div style="margin-top:8px"><button class="btn big'+(can?'':' ghost')+'" '+(S.g>=MAXG()?'disabled':'')+' onclick="tryBreak()">'+breakBtnTxt+'</button></div>'+
      '<p class="small muted">成功率约 '+Math.round(clamp(0.92-r*0.012-l*0.008+(S.usePojing&&(S.pills.pojing||0)>0?0.2:0),0.2,0.99)*100)+'%（失败损失五成当层灵气）</p>'+
      '</div>'+
-     boneHtml+
+     cndHtml+boneHtml+
    '</div>'+
    '<div>'+
      '<div class="panel"><h3>九星图</h3>'+starWheelSvg()+
@@ -2394,7 +2445,11 @@ function loop(){
   if(S.autobreak&&!B&&!P){
     const r=curR(),l=curL(),toR=r+1;
     const special=(l===LAYER_CNT-1&&(toR===8||toR===11||toR===14||toR===15));
-    if(!special&&!(r===3&&S.bones<BONES_REQ[l])&&S.qi>=layerCost())tryBreak();
+    if(!special&&!(r===3&&S.bones<BONES_REQ[l])){
+      const cdef=CONDENSE[r];
+      if(cdef&&cnd().n<cdef.n){if(S.qi>=condCost()){S.qi-=condCost();cnd().n++;}}
+      else if(S.qi>=layerCost())tryBreak();
+    }
   }
   if(tickN%40===0)save();
   if(tickN%20===0)checkQuests();

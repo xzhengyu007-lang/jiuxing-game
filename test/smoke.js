@@ -31,6 +31,7 @@ let guard=0;
 while(S.g<MAXG() && guard++<100000){
   const r=curR(), l=curL();
   if(r===3 && S.bones<BONES_REQ[l]){ S.pills.jigu=1; refineBone(); continue; }
+  if(CONDENSE[r] && cnd().n<CONDENSE[r].n){ S.qi=layerCost()*99; condense(99); continue; }
   if(l===12){
     if(r+1===8) S.pills.xuandan=1;
     if(r+1===11) S.pills.shengsi=1;
@@ -638,7 +639,35 @@ S.mats.yaodan=5;const sm0=S.stones;
 sellMat('yaodan',5);
 assert(S.stones>sm0,'应可售材料');
 curTab='soc';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移');
+/* ========== 阶段九：关窍凝聚（每境每层必修） ========== */
+S=newState();S.ap=999999;
+assert(CONDENSE[0]&&CONDENSE[0].n===13,'聚气境应需13道气旋');
+assert(!CONDENSE[3]&&!CONDENSE[8]&&!CONDENSE[11]&&!CONDENSE[14]&&!CONDENSE[15],'专属机制境界不应另设凝聚');
+assert(Object.keys(CONDENSE).length===17,'应有17个境界设凝聚, 实际 '+Object.keys(CONDENSE).length);
+const rr9=Math.random;Math.random=()=>0.01;
+const g9=S.g;
+S.qi=layerCost()*10;
+tryBreak();
+assert(S.g===g9,'未凝聚时不应突破');
+condense(1);
+assert(S.cnd.n===1,'凝聚一道后应为1');
+condense(1);condense(1);
+assert(S.cnd.n===3,'再凝两道应为3, 实际 '+S.cnd.n);
+S.qi=0;
+condense(99);
+assert(S.cnd.n===3,'灵气不足时不应凝聚');
+const c9=condCost();
+S.qi=c9*10+layerCost()*2;
+condense(99);
+assert(S.cnd.n===13,'一键凝聚应至13, 实际 '+S.cnd.n);
+assert(S.qi>=layerCost(),'凝聚后应余冲击灵气');
+tryBreak();
+assert(S.g===g9+1,'凝聚圆满后应突破, g='+S.g);
+cnd();
+assert(S.cnd.n===0&&S.cnd.l===curL()&&S.cnd.r===curR(),'换层后凝聚进度应重置');
+Math.random=rr9;
+curTab='cult';renderAll();
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移 / 关窍凝聚');
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
