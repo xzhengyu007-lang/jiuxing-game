@@ -1791,6 +1791,7 @@ function zoneCard(z){
      '<button class="btn jade" '+(cdLeft>0?'disabled':'')+' onclick="explore(\''+z.id+'\')">'+(cdLeft>0?('采药 '+cdLeft+'s'):'采药 · 寻宝')+'</button>'+
    '</div></div>';
 }
+var ZGRP_OPEN={}; // 往昔/远处地界折叠组的展开状态（页面每 0.5s 重建 DOM，需记住 open）
 function renderZoneGroups(){
   // 地图按境界分组：当前境界展开，往昔地界折叠，远处地界另列
   let html='';
@@ -1799,7 +1800,7 @@ function renderZoneGroups(){
     if(!zs.length)continue;
     const cards=zs.map(zoneCard).join('');
     if(r===curR())html+=cards;
-    else html+='<details class="zgrp"><summary>往昔地界 · '+REALMS[r].name+'（'+zs.length+' 处地图）</summary>'+cards+'</details>';
+    else html+='<details class="zgrp"'+(ZGRP_OPEN['past'+r]?' open':'')+' ontoggle="ZGRP_OPEN.past'+r+'=this.open"><summary>往昔地界 · '+REALMS[r].name+'（'+zs.length+' 处地图）</summary>'+cards+'</details>';
   }
   const locked=ZONESLIST().filter(z=>z.reqR>curR());
   if(locked.length){
@@ -1810,7 +1811,7 @@ function renderZoneGroups(){
     }
     const sect=locked.filter(z=>z.sect);
     if(sect.length)inner+='<div class="small muted" style="margin:2px 0">紫血宗属地（拜入宗门后开启）：'+sect.map(z=>z.name).join('、')+'</div>';
-    html+='<details class="zgrp"><summary>远处地界 · 尚未踏足（'+locked.length+' 处，随修为解锁）</summary>'+inner+'</details>';
+    html+='<details class="zgrp"'+(ZGRP_OPEN.locked?' open':'')+' ontoggle="ZGRP_OPEN.locked=this.open"><summary>远处地界 · 尚未踏足（'+locked.length+' 处，随修为解锁）</summary>'+inner+'</details>';
   }
   return html;
 }
