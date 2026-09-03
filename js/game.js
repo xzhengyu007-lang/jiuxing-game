@@ -38,7 +38,7 @@ function newState(){
     flags:{intro:0,gumu:0,siguo:0,sect:0,pearl:0,fireSeed:null,sijie:0,mingxing:0,won:0,ascend:0},
     buffs:{julingUntil:0,qps:null},
     autobreak:0, usePojing:1, speed:1,
-    day:1, ap:22, cond:100, cnd:{r:-1,l:-1,n:0},
+    day:1, ap:22, cond:100, cnd:{r:-1,l:-1,n:0}, cndTotal:0,
     pearl:{plants:[],trees:[],beasts:[]},
     expCd:{}, logs:[], lastTick:Date.now(),
     qiToday:0,
@@ -172,7 +172,7 @@ function heroStats(){
   let hp=(80+20*l)*Math.pow(2.1,r);
   let atk=(10+3*l)*Math.pow(2.0,r);
   let def=(5+1.5*l)*Math.pow(2.0,r);
-  const extra=(1+0.05*S.bones)*(1+0.18*starCnt())*(1+0.03*S.xiusui)*(1+S.flags.sijie)*(0.5+0.5*S.cond/100)*(1+0.04*soulRankIdx()+soulGfFx('all'));
+  const extra=(1+0.05*S.bones)*(1+0.18*starCnt())*(1+0.03*S.xiusui)*(1+S.flags.sijie)*(0.5+0.5*S.cond/100)*(1+0.04*soulRankIdx()+soulGfFx('all'))*(1+cndFxPct());
   hp*=extra;atk*=extra;def*=extra;
   hp*=(1+(S.perm.hp||0)/100);atk*=(1+(S.perm.atk||0)/100);def*=(1+(S.perm.def||0)/100);
   if(S.flags.mingxing){hp*=1.1;atk*=1.1;def*=1.1;}
@@ -383,14 +383,15 @@ const CONDENSE={
 };
 function cnd(){const r=curR(),l=curL();if(!S.cnd||S.cnd.r!==r||S.cnd.l!==l)S.cnd={r:r,l:l,n:0};return S.cnd;}
 function condCost(){return Math.ceil(layerCost()*0.32);}
+function cndFxPct(){return 0.001*((S&&S.cndTotal)||0);} // 凝聚战力：每凝聚一物，攻防气血 +0.1%，历境通用、破层不灭
 function condense(n){
   const def=CONDENSE[curR()];
   if(!def)return;
   const c=cnd(),unit=condCost();
   const want=(n==='all')?(def.n-c.n):Math.min(n||1,def.n-c.n);
   let done=0;
-  while(done<want&&S.qi>=unit){S.qi-=unit;c.n++;done++;}
-  if(done>=1)toast('凝聚成功：'+def.u+' '+c.n+' / '+def.n+(c.n>=def.n?'（圆满，可冲击了）':''),'good');
+  while(done<want&&S.qi>=unit){S.qi-=unit;c.n++;done++;S.cndTotal=(S.cndTotal||0)+1;}
+  if(done>=1)toast('凝聚成功：'+def.u+' '+c.n+' / '+def.n+(c.n>=def.n?'（圆满，可冲击了）':'（战力微涨）'),'good');
   else toast(S.qi<unit?'灵气不足，凝聚一道'+def.u+'需 '+fmt(unit):'本层'+def.u+'已圆满');
   renderAll();
 }
@@ -1747,6 +1748,7 @@ function renderCult(){
     const c=cnd(),unit=condCost(),full=c.n>=cdef.n;
     cndHtml='<div class="panel"><h3>'+cdef.d+' · '+cdef.u+'（'+REALMS[r].name+'每层必修）</h3>'+
      '<p class="small">本境每一层，须先以灵气凝聚 <b class="gold">'+cdef.n+'</b> 道<b class="jade">'+cdef.u+'</b>，足数方可冲击关隘；每道耗灵气 '+fmt(unit)+'。</p>'+
+     '<p class="small jade">每凝一物，攻防气血永久 +0.1%（历境通用、破层不灭）——已凝聚 '+(S.cndTotal||0)+' 物，当前战力加成 +'+(cndFxPct()*100).toFixed(1)+'%。</p>'+
      '<div class="bar" style="margin:8px 0"><i style="width:'+clamp(c.n/cdef.n*100,0,100)+'%"></i><span>'+cdef.u+' '+c.n+' / '+cdef.n+(full?' · 圆满，可冲击':'')+'</span></div>'+
      '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn jade" onclick="condense(1)">凝聚一道（'+fmt(unit)+' 灵气）</button>'+
      '<button class="btn" '+(full?'disabled':'')+' onclick="condense(99)">一键凝聚余下</button></div>'+
@@ -1787,6 +1789,7 @@ function renderCult(){
    '<div>'+
      '<div class="panel"><h3>九星图</h3>'+starWheelSvg()+
      '<p class="small muted" style="text-align:center">已开启 '+starCnt()+' / 9 —— 每星皆有专属神通，详见「九星」页</p></div>'+
+     charStatPanelHtml()+
      dailyPanelHtml()+
      '<div class="panel"><h3>剧情 · 待办</h3>'+
      (qs.length?qs.map(q=>'<div class="row-item"><div class="info"><div class="nm">'+q.name+'</div><div class="small muted">'+q.desc+'</div></div></div>').join(''):'<p class="small muted">诸事已了。</p>')+
@@ -2305,9 +2308,25 @@ function renderSect(){
    '<p class="small muted">分宗藏经独一份：玄天罡气诀、玄天十三剑、玄天道经、玄天镇狱拳——皆以贡献兑换，他处无售。</p>'+
    '</div></div>';
 }
+/* ---------------- 人物属性面板（修炼页 / 练体页共用） ---------------- */
+function charStatPanelHtml(){
+  const st=heroStats(),sec=st.sec;
+  const spdPct=Math.min(25,sec.spd*2.5);
+  const statIt=(k,v,d)=>'<div class="row-item"><div class="info"><div class="nm">'+k+'</div><div class="small muted">'+d+'</div></div><div><b class="gold">'+v+'</b></div></div>';
+  return '<div class="panel"><h3>人物属性 · 八维战体系</h3>'+
+   statIt('攻击 / 防御 / 气血',fmt(st.atk)+' / '+fmt(st.def)+' / '+fmt(st.hp),'根基三围：受攻击、防御、气血全加成放大')+
+   statIt('暴击 / 暴伤',Math.round(sec.crit*100)+'% / x'+sec.cdmg.toFixed(2),'通髓所开：暴击时伤害成倍迸发')+
+   statIt('闪避',Math.round(sec.dodge*100)+'%','开窍所化：身形难测，避开敌方扑击')+
+   statIt('吸血',Math.round(sec.leech*100)+'%','沸血所养：伤敌一分，自愈一分')+
+   statIt('速度',sec.spd.toFixed(0)+'（追击 '+spdPct+'%）','伸筋所伸：身法快到极致可追击一记')+
+   statIt('穿透',Math.round(sec.pen*100)+'%','罡气所至：无视敌方部分防御')+
+   statIt('再生',Math.round(sec.regen*100)+'% / 回合','洗脏所得：五脏如鼎，气血自生')+
+   statIt('反震',Math.round(sec.thorns*100)+'%','罡气所震：受击反噬敌人')+
+   statIt('关窍凝聚',(S.cndTotal||0)+' 物 · +'+(cndFxPct()*100).toFixed(1)+'%','气旋血纹窍穴道基……每凝一物，攻防气血 +0.1%')+
+   '</div>';
+}
 /* ---------------- 练体页：肉身九秘 + 人物属性 ---------------- */
 function renderBody(){
-  const st=heroStats(),sec=st.sec;
   const cur=bodyCur();
   const rows=BODY_STAGES.map((sg,i)=>{
     const lv=(S.body.lv[i]||0),done=lv>=BODY_MAX_LV,active=cur&&cur.i===i;
@@ -2332,20 +2351,8 @@ function renderBody(){
      '<div class="small muted">'+g.d+'</div><div class="small">加成：'+gfFxTxt(g.fx)+'</div></div>'+
      '<div>'+act+'</div></div>';
   }).join('');
-  const spdPct=Math.min(25,sec.spd*2.5);
-  const statIt=(k,v,d)=>'<div class="row-item"><div class="info"><div class="nm">'+k+'</div><div class="small muted">'+d+'</div></div><div><b class="gold">'+v+'</b></div></div>';
-  const statPanel='<div class="panel"><h3>人物属性 · 八维战体系</h3>'+
-   statIt('攻击 / 防御 / 气血',fmt(st.atk)+' / '+fmt(st.def)+' / '+fmt(st.hp),'根基三围：受攻击、防御、气血全加成放大')+
-   statIt('暴击 / 暴伤',Math.round(sec.crit*100)+'% / x'+sec.cdmg.toFixed(2),'通髓所开：暴击时伤害成倍迸发')+
-   statIt('闪避',Math.round(sec.dodge*100)+'%','开窍所化：身形难测，避开敌方扑击')+
-   statIt('吸血',Math.round(sec.leech*100)+'%','沸血所养：伤敌一分，自愈一分')+
-   statIt('速度',sec.spd.toFixed(0)+'（追击 '+spdPct+'%）','伸筋所伸：身法快到极致可追击一记')+
-   statIt('穿透',Math.round(sec.pen*100)+'%','罡气所至：无视敌方部分防御')+
-   statIt('再生',Math.round(sec.regen*100)+'% / 回合','洗脏所得：五脏如鼎，气血自生')+
-   statIt('反震',Math.round(sec.thorns*100)+'%','罡气所震：受击反噬敌人')+
-   '</div>';
   $('main').innerHTML='<div class="grid2">'+
-   statPanel+
+   charStatPanelHtml()+
    '<div><div class="panel"><h3>肉身九秘 · 淬体（'+bodyTotal()+' / 90 重）</h3>'+
    '<p class="small muted">外炼筋骨皮，内炼脏髓血窍罡——九秘依序而开，每秘十重。淬体耗灵气与'+moneyName()+'（四秘「脏」之后另耗兽核），不耗行动点；练体所得的攻防气血与八维属性，永久生效。</p>'+
    rows+'</div>'+
@@ -2503,7 +2510,7 @@ function loop(){
     const special=(l===LAYER_CNT-1&&(toR===8||toR===11||toR===14||toR===15));
     if(!special&&!(r===3&&S.bones<BONES_REQ[l])){
       const cdef=CONDENSE[r];
-      if(cdef&&cnd().n<cdef.n){if(S.qi>=condCost()){S.qi-=condCost();cnd().n++;}}
+      if(cdef&&cnd().n<cdef.n){if(S.qi>=condCost()){S.qi-=condCost();cnd().n++;S.cndTotal=(S.cndTotal||0)+1;}}
       else if(S.qi>=layerCost())tryBreak();
     }
   }
