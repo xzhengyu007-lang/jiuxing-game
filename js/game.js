@@ -26,6 +26,7 @@ function nearBottom(box){return box.scrollHeight-box.scrollTop-box.clientHeight<
 /* ---------------- 存档与状态 ---------------- */
 const SAVE_KEY='jsxing_batijue_save_v1';
 let S=null, B=null, P=null, curTab='cult', autoBattle=false, sijieTimer=null, tickN=0, lastTouch=0;
+let formFocusUntil=0; // 表单聚焦宽限：手机原生下拉/输入期间暂停循环重绘，免得下拉栏被重建吞掉
 const toastCd={};
 
 function newState(){
@@ -1965,17 +1966,18 @@ function renderPillStore(){
 }
 /* ---------------- 华云商行 ---------------- */
 /* 采购具名灵植/材料：买价 = 卖价 ×2（同一材料卖出再买回必亏一倍，杜绝等价替换刷钱） */
-let mktTier=1;
+let mktTier=1,mktHerb=''; // mktHerb：记住采购选中项，页面重建（购买/换品阶/循环重绘）后不跳回第一个
 function marketBuyHtml(){
   const t=clamp(mktTier,1,10);
   const pool=HERBS_BY_TIER[t]||[];
-  const opts=pool.map(id=>'<option value="'+id+'">'+HERBS[id].n+'（'+t+'品 · 买 '+fmtMoney(herbPrice(t)*2)+' '+moneyName()+'/株）</option>').join('');
+  if(!(mktHerb&&pool.indexOf(mktHerb)>=0))mktHerb=pool[0]||''; // 选中项不在当前品阶池时才回落
+  const opts=pool.map(id=>'<option value="'+id+'"'+(id===mktHerb?' selected':'')+'>'+HERBS[id].n+'（'+t+'品 · 买 '+fmtMoney(herbPrice(t)*2)+' '+moneyName()+'/株）</option>').join('');
   return '<div class="panel"><h3>采购 · 灵植材料（买价 = 卖价两倍）</h3>'+
    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'+
    '<select class="fin" id="mktTierSel" onchange="mktTier=+this.value;renderMarket()">'+
    [1,2,3,4,5,6,7,8,9,10].map(x=>'<option value="'+x+'"'+(x===t?' selected':'')+'>'+x+' 品灵植</option>').join('')+
    '</select>'+
-   '<select class="fin" id="mktHerbSel">'+opts+'</select>'+
+   '<select class="fin" id="mktHerbSel" onchange="mktHerb=this.value">'+opts+'</select>'+
    '<button class="btn" onclick="buyHerb(document.getElementById(\'mktHerbSel\').value,1)">购 1 株</button>'+
    '<button class="btn" onclick="buyHerb(document.getElementById(\'mktHerbSel\').value,10)">购 10 株</button>'+
    '</div>'+
@@ -1988,6 +1990,7 @@ function buyHerb(hid,n){
   const cost=herbPrice(h.t)*2*n;
   if(S.stones<cost){toast(moneyName()+'不足：需 '+fmtMoney(cost)+' '+moneyName());return;}
   S.stones-=cost;S.herbs[hid]=(S.herbs[hid]||0)+n;
+  mktHerb=hid; // 重绘后仍选中此药，可连续追加购买
   toast('购得 '+h.n+' x'+n,'good');renderAll();save();
 }
 function buyMat(id,n){
@@ -2496,6 +2499,24 @@ function renderAll(){
   else if(curTab==='realms')renderRealms();
 }
 
+/* ---------------- 表单聚焦闸：下拉/输入期间暂停重绘 ----------------
+ * 手机上原生下拉选择器（及桌面输入框）打开期间，若循环重建 DOM，会把正被
+ * 操作的控件连根拔掉——商行采购下拉栏就这样「点开又自己消失」。 */
+function initFormGuard(){
+  const isForm=t=>t==='SELECT'||t==='INPUT'||t==='TEXTAREA';
+  document.addEventListener('focusin',function(e){
+    if(e.target&&isForm(e.target.tagName))formFocusUntil=Date.now()+120000; // 聚焦即续闸（上限 2 分钟防卡死）
+  },true);
+  document.addEventListener('focusout',function(e){
+    if(e.target&&isForm(e.target.tagName))formFocusUntil=Date.now()+600; // 失焦后小宽限，让 change 事件平稳落地
+  },true);
+}
+function formBusy(){
+  if(Date.now()<formFocusUntil)return true;
+  const ae=document.activeElement;
+  return !!(ae&&(ae.tagName==='SELECT'||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'));
+}
+
 /* ---------------- 主循环 ---------------- */
 let lastLoop=Date.now();
 function loop(){
@@ -2516,7 +2537,7 @@ function loop(){
   }
   if(tickN%40===0)save();
   if(tickN%20===0)checkQuests();
-  if(tickN%2===0&&Date.now()-lastTouch>400)renderAll(); // 刚触屏的瞬间不重建 DOM，避免手机点按落空
+  if(tickN%2===0&&!formBusy()&&Date.now()-lastTouch>400)renderAll(); // 刚触屏的瞬间不重建 DOM，避免手机点按落空；下拉/输入聚焦期间也暂停
   if(tickN%3===0)autoStep();
 }
 function startGame(){
@@ -2559,6 +2580,7 @@ function initSky(){
 function init(){
   initSky();
   document.addEventListener('touchstart',function(){lastTouch=Date.now();},{passive:true});
+  initFormGuard();
   S=load();
   if(!S)S=newState();
   // 离线收益

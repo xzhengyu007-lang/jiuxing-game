@@ -772,6 +772,15 @@ const mc11=matPrice('yaodan',curR())*2,money12=S.stones;
 buyMat('yaodan',3);
 assert(S.mats.yaodan===3,'购材料应入库');
 assert(S.stones===money12-mc11*3,'材料买价应为卖价两倍');
+/* 下拉栏防吞：表单聚焦期间循环不重建 DOM；采购选中不跳回 */
+assert(typeof formBusy==='function'&&typeof initFormGuard==='function','应有表单聚焦闸');
+assert(!formBusy(),'无聚焦时不应暂停循环重绘');
+mktTier=3;mktHerb=HERBS_BY_TIER[3][0];
+const hsel11=marketBuyHtml();
+assert(hsel11.indexOf('value="'+HERBS_BY_TIER[3][0]+'" selected')>=0,'采购下拉应保持选中项');
+assert(hsel11.indexOf('id="mktHerbSel" onchange')>=0,'采购下拉应记录用户选择');
+buyHerb(HERBS_BY_TIER[3][0],1);
+assert(marketBuyHtml().indexOf('value="'+HERBS_BY_TIER[3][0]+'" selected')>=0,'购买后选中项不应跳回');
 /* 秘境：好坏门派各五、22境22秘境 */
 S.mj=null;mjNew();
 assert(SECTS.length===10&&SECTS.filter(function(s){return s.align;}).length===5,'好坏门派应各五');
@@ -826,7 +835,7 @@ B.ehp=1;useSkill('bati');
 assert(hatredOf('tm')===40,'反杀追杀者应仇恨-80（120→40）');
 curTab='mijing';renderAll();
 curTab='market';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移 / 关窍凝聚·凝聚战力·人物属性面板 / 魂修·丹火·丹炉·珠内炼丹 / 秘境·门派恩怨·丹方落名·商行两倍价');
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移 / 关窍凝聚·凝聚战力·人物属性面板 / 魂修·丹火·丹炉·珠内炼丹 / 秘境·门派恩怨·丹方落名·商行两倍价·下拉防吞');
 
 `;
 eval(sandboxWrap());
