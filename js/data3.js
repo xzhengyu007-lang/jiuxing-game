@@ -80,3 +80,43 @@ const FURNACES=[
   {n:'九窍玄炉',pow:2000,cost:2e8,d:'九窍纳火，玄之又玄。'},
   {n:'混沌鼎',pow:6000,cost:2e9, d:'混沌神器，可炼万象。'}
 ];
+
+/* ---------------- 秘境 · 门派（好坏各五，仇恨值系统） ---------------- */
+const SECTS=[
+  {id:'xt',n:'玄天道宗',align:1,d:'正道魁首，一百零八分宗之总宗。'},
+  {id:'dx',n:'丹霞谷',align:1,d:'丹道圣地，最重香火情分。'},
+  {id:'tj',n:'天剑阁',align:1,d:'一剑破万法，眼里揉不得沙。'},
+  {id:'wf',n:'万佛寺',align:1,d:'慈悲为怀，先礼后兵。'},
+  {id:'zx',n:'紫血宗',align:1,d:'亦正亦侠，以战养道。'},
+  {id:'xm',n:'血魔宗',align:0,d:'炼血为道，所过之处寸草不生。'},
+  {id:'wd',n:'万毒门',align:0,d:'百毒缠身，杀人于无形。'},
+  {id:'ym',n:'幽冥教',align:0,d:'驭使亡魂，夜行无声。'},
+  {id:'tm',n:'天魔殿',align:0,d:'魔功盖世，夺宝如吃饭。'},
+  {id:'sy',n:'尸阴宗',align:0,d:'驱尸炼阴，行踪诡秘。'}
+];
+const SECTS_BY_ID={};SECTS.forEach(function(s){SECTS_BY_ID[s.id]=s;});
+/* 每个大境界一处秘境（22 境恰 22 处） */
+const SECRET_REALMS=['青云秘境','凤鸣古藏','落霞幻境','黑风王陵','流沙古渡','碧波龙宫','紫府洞天','白骨魔窟','镇魔塔影','迷雾仙府','荒古战场','天罡雷池','锁灵幻蜃','寒渊冰窖','云梦仙墟','玄冰神藏','落星古域','万妖圣地','碧落仙府','镇魔深渊','雷泽神渊','星汉天穹'];
+/* 秘境中拦路夺宝的修士名号 */
+const MJ_ROGUE_NAMES=['黑衣修士','独行客','蒙面人','瘦高个','独眼老者','青衫客','枯荣子','血手判官','追风客','断岳刀'];
+
+/* ---------------- 丹方落名：把「N株t品以上灵植」落实为具体灵植 ----------------
+ * 每张丹方按 id 哈希确定性选药，同一丹方永远要同几种药——材料可种可购可囤，
+ * 商行按名收购；craft/matsTxt/珠内炼丹皆走具名分支，无需另行适配。 */
+(function(){
+  function h32(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*16777619)>>>0;}return h;}
+  RECIPES.forEach(function(rc){
+    if(!rc.matsGE)return;
+    var h=h32(rc.id),mats={},gi=0;
+    rc.matsGE.forEach(function(sp){
+      var t=Math.max(1,Math.min(10,sp.t|0));
+      var pool=HERBS_BY_TIER[t]||[];
+      if(!pool.length)return;
+      var k=pool[(h+gi*7919+t*104729)%pool.length];gi++;
+      mats[k]=(mats[k]||0)+sp.n;
+    });
+    if(rc.shouhe){mats.shouhe=(mats.shouhe||0)+rc.shouhe;delete rc.shouhe;}
+    if(Object.keys(mats).length){rc.mats=mats;}
+    delete rc.matsGE;
+  });
+})();

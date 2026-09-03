@@ -284,8 +284,9 @@ function sellMatRows(){
   const rows=Object.keys(MATS).map(function(id){
     const c=S.mats[id]||0;
     if(!c)return '';
-    return '<div class="row-item"><div class="info"><div class="nm">'+MATS[id].n+' x'+c+'</div><div class="small muted">收购价 '+fmtMoney(matPrice(id,r))+' '+moneyName()+'/份</div></div>'+
-     '<span><button class="btn ghost" onclick="sellMat(\''+id+'\',1)">售1</button> <button class="btn" onclick="sellMat(\''+id+'\','+c+')">全售</button></span></div>';
+    return '<div class="row-item"><div class="info"><div class="nm">'+MATS[id].n+' x'+c+'</div><div class="small muted">收购价 '+fmtMoney(matPrice(id,r))+' '+moneyName()+'/份 · 买回 '+fmtMoney(matPrice(id,r)*2)+'/份（两倍）</div></div>'+
+     '<span><button class="btn ghost" onclick="buyMat(\''+id+'\',1)">购1</button> '+
+     '<button class="btn ghost" onclick="sellMat(\''+id+'\',1)">售1</button> <button class="btn" onclick="sellMat(\''+id+'\','+c+')">全售</button></span></div>';
   }).join('');
   return rows;
 }

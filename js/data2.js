@@ -100,44 +100,44 @@ const GIFT_DEFS={
 const SHOP2=[
  {reqR:0,items:[
   {k:'lingcha', costFn:function(r){return Math.floor(250*(1+0.15*r));}},
-  {k:'lingcao10b',n:'灵草 x20',cost:function(r){return Math.floor(110*Math.pow(1.5,r));},give:function(S){S.herbs.lingcao=(S.herbs.lingcao||0)+20;}},
-  {k:'yaodan10',n:'妖丹 x10',cost:function(r){return Math.floor(220*Math.pow(1.5,r));},give:function(S){S.mats.yaodan=(S.mats.yaodan||0)+10;}},
-  {k:'shoupi10',n:'妖皮革 x10',cost:function(r){return Math.floor(200*Math.pow(1.5,r));},give:function(S){S.mats.shoupi=(S.mats.shoupi||0)+10;}},
+  {k:'lingcao10b',n:'灵草 x20',cost:function(r){return herbPrice(1)*40;},give:function(S){S.herbs.lingcao=(S.herbs.lingcao||0)+20;}},
+  {k:'yaodan10',n:'妖丹 x10',cost:function(r){return matPrice('yaodan',r)*20;},give:function(S){S.mats.yaodan=(S.mats.yaodan||0)+10;}},
+  {k:'shoupi10',n:'妖皮革 x10',cost:function(r){return matPrice('shoupi',r)*20;},give:function(S){S.mats.shoupi=(S.mats.shoupi||0)+10;}},
  ]},
  {reqR:2,items:[
   {k:'lingjiu',costFn:function(r){return Math.floor(500*(1+0.15*r));}},
   {k:'yanzhi', costFn:function(r){return Math.floor(1200*(1+0.15*r));}},
-  {k:'yaogu10',n:'妖骨 x10',cost:function(r){return Math.floor(420*Math.pow(1.5,r));},give:function(S){S.mats.yaogu=(S.mats.yaogu||0)+10;}},
+  {k:'yaogu10',n:'妖骨 x10',cost:function(r){return matPrice('yaogu',r)*20;},give:function(S){S.mats.yaogu=(S.mats.yaogu||0)+10;}},
   {k:'longli',n:'龙力丹 x1',cost:function(r){return Math.floor(pillPrice('longli',r)*2.2);},give:function(S){S.pills.longli=(S.pills.longli||0)+1;}},
  ]},
  {reqR:4,items:[
   {k:'jiansui',costFn:function(r){return Math.floor(2500*(1+0.15*r));}},
   {k:'huace',  costFn:function(r){return Math.floor(4000*(1+0.15*r));}},
   {k:'hehuan',n:'合欢露 x1',cost:function(r){return Math.floor(pillPrice('hehuan',r)*2.2);},give:function(S){S.pills.hehuan=(S.pills.hehuan||0)+1;}},
-  {k:'neidan1',n:'内丹 x1',cost:function(r){return Math.floor(2600*Math.pow(1.5,r));},give:function(S){S.mats.neidan=(S.mats.neidan||0)+1;}},
+  {k:'neidan1',n:'内丹 x1',cost:function(r){return matPrice('neidan',r)*2;},give:function(S){S.mats.neidan=(S.mats.neidan||0)+1;}},
  ]},
  {reqR:6,items:[
   {k:'yuzhuo',costFn:function(r){return Math.floor(6000*(1+0.15*r));}},
   {k:'qin',   costFn:function(r){return Math.floor(15000*(1+0.15*r));}},
   {k:'tianren',n:'天人丹 x1',cost:function(r){return Math.floor(pillPrice('tianren',r)*2.2);},give:function(S){S.pills.tianren=(S.pills.tianren||0)+1;}},
-  {k:'longlin1',n:'龙鳞 x1',cost:function(r){return Math.floor(9000*Math.pow(1.5,r));},give:function(S){S.mats.longlin=(S.mats.longlin||0)+1;}},
+  {k:'longlin1',n:'龙鳞 x1',cost:function(r){return matPrice('longlin',r)*2;},give:function(S){S.mats.longlin=(S.mats.longlin||0)+1;}},
  ]},
  {reqR:9,items:[
   {k:'jinxiu',costFn:function(r){return Math.floor(22000*(1+0.15*r));}},
-  {k:'shenxue1',n:'神血晶 x1',cost:function(r){return Math.floor(26000*Math.pow(1.5,r));},give:function(S){S.mats.shenxue=(S.mats.shenxue||0)+1;}},
+  {k:'shenxue1',n:'神血晶 x1',cost:function(r){return matPrice('shenxue',r)*2;},give:function(S){S.mats.shenxue=(S.mats.shenxue||0)+1;}},
   {k:'jiuzhuan',n:'九转金丹 x1',cost:function(r){return Math.floor(pillPrice('jiuzhuan',r)*2.2);},give:function(S){S.pills.jiuzhuan=(S.pills.jiuzhuan||0)+1;}},
  ]},
  {reqR:12,items:[
   {k:'longxiang',costFn:function(r){return Math.floor(60000*(1+0.15*r));}},
-  {k:'daowen1',n:'道纹石 x1',cost:function(r){return Math.floor(60000*Math.pow(1.5,r));},give:function(S){S.mats.daowen=(S.mats.daowen||0)+1;}},
+  {k:'daowen1',n:'道纹石 x1',cost:function(r){return matPrice('daowen',r)*2;},give:function(S){S.mats.daowen=(S.mats.daowen||0)+1;}},
   {k:'puti',n:'菩提玉髓丹 x1',cost:function(r){return Math.floor(pillPrice('puti',r)*2.2);},give:function(S){S.pills.puti=(S.pills.puti||0)+1;}},
  ]},
  {reqR:13,items:[
-  {k:'xianling5',n:'仙灵草 x5',cost:function(r){return Math.floor(8000*Math.pow(1.5,r));},give:function(S){S.herbs.xianling=(S.herbs.xianling||0)+5;}},
-  {k:'wanhun3',n:'万魂兰 x3',cost:function(r){return Math.floor(5000*Math.pow(1.5,r));},give:function(S){S.herbs.wanhun=(S.herbs.wanhun||0)+3;}},
+  {k:'xianling5',n:'仙灵草 x5',cost:function(r){return herbPrice(11)*2*5;},give:function(S){S.herbs.xianling=(S.herbs.xianling||0)+5;}},
+  {k:'wanhun3',n:'万魂兰 x3',cost:function(r){return herbPrice(10)*2*3;},give:function(S){S.herbs.wanhun=(S.herbs.wanhun||0)+3;}},
  ]},
  {reqR:14,items:[
-  {k:'jiutian2',n:'九天仙莲 x2',cost:function(r){return Math.floor(30000*Math.pow(1.5,r));},give:function(S){S.herbs.jiutian=(S.herbs.jiutian||0)+2;}},
+  {k:'jiutian2',n:'九天仙莲 x2',cost:function(r){return herbPrice(12)*2*2;},give:function(S){S.herbs.jiutian=(S.herbs.jiutian||0)+2;}},
   {k:'qingpo',n:'清魄返神丹 x1',cost:function(r){return Math.floor(pillPrice('qingpo',r)*2.2);},give:function(S){S.pills.qingpo=(S.pills.qingpo||0)+1;}},
  ]},
 ];

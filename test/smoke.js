@@ -18,6 +18,7 @@ const data2=fs.readFileSync(path.join(__dirname,'..','js','data2.js'),'utf8');
 const social=fs.readFileSync(path.join(__dirname,'..','js','social.js'),'utf8');
 const data3=fs.readFileSync(path.join(__dirname,'..','js','data3.js'),'utf8');
 const soul=fs.readFileSync(path.join(__dirname,'..','js','soul.js'),'utf8');
+const mijing=fs.readFileSync(path.join(__dirname,'..','js','mijing.js'),'utf8');
 const game=fs.readFileSync(path.join(__dirname,'..','js','game.js'),'utf8');
 const test=`
 function assert(c,msg){ if(!c) throw new Error('断言失败: '+msg); }
@@ -214,19 +215,23 @@ assert(new Set(Object.keys(HERBS)).size===Object.keys(HERBS).length,'灵植 id �
 for(const rc of RECIPES){
   assert(DAN_RANKS[rc.rank]!==undefined,'丹方位阶应合法: '+rc.id);
   assert((rc.reqR||0)<=21,'丹方境界需求应合法: '+rc.id);
-  if(rc.matsGE)for(const sp of rc.matsGE)
-    assert(HERBS_BY_TIER[sp.t]&&HERBS_BY_TIER[sp.t].length,'丹方 '+rc.id+' 需 '+sp.t+' 品灵植，药池应覆盖');
+  for(const k in (rc.mats||{}))
+    assert(k==='shouhe'||HERBS[k]||MATS[k],'丹方 '+rc.id+' 材料 '+k+' 应可解析到灵植或材料');
 }
 /* —— 新式丹方炼制（按品阶取药，低阶先耗） —— */
 S=newState();
-const genId=HERBS_BY_TIER[2][0];
-S.herbs[genId]=50;S.danExp=1e9;S.ap=99;
+S.danExp=1e9;S.ap=99;
 assert(danRankIdx()===9,'阅历百万应至丹帝');
-const rc2=RECIPES.find(r=>r.matsGE&&(r.reqR||0)===0&&r.rank===0);
-assert(rc2,'应存在入门新式丹方');
+const rc2=RECIPES.find(r=>(r.reqR||0)===0&&r.rank===0);
+assert(rc2,'应存在入门丹方');
+for(const k in rc2.mats){const n=rc2.mats[k];
+  if(k==='shouhe')S.mats.shouhe=(S.mats.shouhe||0)+n*5;
+  else S.herbs[k]=(S.herbs[k]||0)+n*5;}
 craft(rc2.id);
-assert((S.pills[rc2.out]||0)===1,'新式丹方应炼成: '+rc2.id);
-assert(S.herbs[genId]===47,'应消耗3株灵植, 实余 '+S.herbs[genId]);
+assert((S.pills[rc2.out]||0)===1,'丹方应炼成: '+rc2.id);
+for(const k in rc2.mats){const n=rc2.mats[k];
+  if(k==='shouhe')assert(S.mats.shouhe===n*4,'兽核应耗 '+n+' 枚');
+  else assert(S.herbs[k]===n*4,'应按名消耗 '+HERBS[k].n+' x'+n);}
 /* —— 丹方双重解锁（位阶 + 修为境界） —— */
 const rcHi=RECIPES.find(r=>(r.reqR||0)>=5);
 assert(rcHi,'应存在高境界丹方');
@@ -412,7 +417,8 @@ assert(S.stat.crafts>=100,'批量炼丹应按炉计数');
 S=newState();
 S.g=LAYER_CNT; // 凝血一层，风府星可凝
 S.stones=1e12;S.qi=1e60;S.ap=999;S.danExp=1e9;
-S.herbs[HERBS_BY_TIER[1][0]]=9999;S.herbs[HERBS_BY_TIER[2][0]]=9999;S.mats.shouhe=9999;
+const rs0=RECIPES.find(r=>r.id==='r_star0');
+for(const k in rs0.mats){if(k==='shouhe')S.mats.shouhe=9999;else S.herbs[k]=9999;}
 const rrr=Math.random;Math.random=()=>0.001; // 必成丹且必出巨丹
 craft('r_star0');
 assert((S.pills.star0_5||0)===1,'固定随机应出巨丹');
@@ -722,11 +728,93 @@ assert(!skillOk(ss10),'魂力不足魂技应不可用');
 const hk10=SKILLS.filter(x=>x.effect==='soul');
 assert(hk10.length===8,'应有8式魂修战技');
 curTab='soulfire';renderAll();
-console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移 / 关窍凝聚 / 魂修·丹火·丹炉·珠内炼丹');
+/* ========== 阶段十一：秘境 / 丹方落名 / 商行两倍价 / 悬赏猎首 ========== */
+S=newState();S.ap=999999;S.stones=1e6;S.flags.intro=1;
+/* 丹方落名：609 张品阶丹方全部落到具体灵植，材料可解析 */
+assert(RECIPES.every(function(r){return !r.matsGE;}),'不应再有品阶丹方 matsGE');
+assert(RECIPES.every(function(r){return r.mats&&Object.keys(r.mats).length;}),'每张丹方都应有具名材料');
+assert(RECIPES.every(function(r){return Object.keys(r.mats).every(function(k){return k==='shouhe'||HERBS[k]||MATS[k];});}),'具名材料应可解析到灵植或材料');
+assert(RECIPES.find(function(r){return r.id==='r_star0';}).mats.shouhe===2,'凝星丹方应保留兽核需求');
+/* 具名材料炼丹走通：炼一炉回气丹，消耗具名灵草 */
+const rr11=Math.random;Math.random=()=>0.5;
+S.danExp=1e4;S.herbs.lingcao=10;
+curTab='alchemy';craft('huiqi',1);
+assert(S.herbs.lingcao===8,'炼丹应按名消耗灵草x2, 实余 '+S.herbs.lingcao);
+assert((S.pills.huiqi||0)>=1,'应炼出回气丹');
+/* 商行：买价=卖价×2，买5卖5必亏 */
+const mk11=Object.keys(HERBS)[500];
+S.herbs[mk11]=0;
+const price11=herbPrice(HERBS[mk11].t)*2,money11=S.stones;
+buyHerb(mk11,5);
+assert(S.herbs[mk11]===5,'购药应入库');
+assert(S.stones===money11-price11*5,'灵植买价应为卖价两倍');
+sellHerb(mk11,5);
+assert(S.stones<money11,'买5卖5应净亏（两倍价防刷）');
+S.mats.yaodan=0;
+const mc11=matPrice('yaodan',curR())*2,money12=S.stones;
+buyMat('yaodan',3);
+assert(S.mats.yaodan===3,'购材料应入库');
+assert(S.stones===money12-mc11*3,'材料买价应为卖价两倍');
+/* 秘境：好坏门派各五、22境22秘境 */
+S.mj=null;mjNew();
+assert(SECTS.length===10&&SECTS.filter(function(s){return s.align;}).length===5,'好坏门派应各五');
+assert(SECRET_REALMS.length===22,'22境应有22处秘境');
+assert(mjRealmName()===SECRET_REALMS[0],'低境界应探对应秘境');
+const ap11=S.ap,stA11=S.stones;
+Math.random=()=>0.01; /* <0.42 走珍宝线 */
+S.mj.used=0;S.mj.day=0;
+enterMijing();
+assert(S.mj.used===1&&S.mj.day===S.day,'探秘境应记录当日已探');
+assert(S.stones>stA11,'珍宝线应得灵石');
+assert(S.ap===ap11-2,'探秘境应耗2行动点');
+/* 遭遇夺宝人：礼让正道得好感 */
+S.mj.used=0;
+Math.random=()=>0.9; /* >=0.77 走遭遇线 */
+enterMijing();
+assert(S.mj.enc&&S.mj.enc.sect,'高掷应遭遇夺宝人');
+Math.random=rr11;
+S.mj.enc={sect:'tj',foeN:'天剑阁 · 黑衣修士',foeR:1,foeM:1.3};
+mjChoice('yield');
+assert(repOf('tj')===6,'礼让天剑阁应好感+6');
+/* 震慑失败转恶战；胜后门派仇恨+25 */
+S.mj.enc={sect:'tm',foeN:'天魔殿 · 黑衣修士',foeR:1,foeM:1.3};
+Math.random=()=>0.99;
+mjChoice('awe');
+assert(B&&B.e.mj&&B.e.mj.type==='rob','震慑失败应转为战斗');
+B.ehp=1;Math.random=()=>0.5;
+useSkill('bati');
+assert(!S.mj.enc,'战后应清除遭遇');
+assert(hatredOf('tm')===25,'斩天魔殿修士应仇恨+25');
+/* 悬赏猎首：击杀首领进度应+1（bug 修复） */
+const bossIdx11=DAILY_TYPES.findIndex(function(t){return t.k==='boss';});
+assert(bossIdx11>=0,'每日悬赏应含猎首类');
+S.daily={day:S.day,qs:[bossIdx11],prog:[0],done:[0],cnt:[2],rw:[100]};
+S.ap=999999;
+beginBattle('mijing',-1,{n:'秘境妖王',r:1,m:2,boss:1,noAfx:1,mj:{type:'guard'}},0);
+B.ehp=1;useSkill('bati');
+assert(S.daily.prog[0]===1,'击杀首领猎首悬赏进度应+1');
+assert(S.daily.done[0]!==1||S.daily.prog[0]>=1,'首领击杀应入账');
+/* 仇恨追杀与反杀雪仇 */
+S.mj.hatred={tm:120};S.mj.ambush=null;
+const st11=S.stones;
+Math.random=()=>0.01; /* <0.25 触发截杀 */
+mjHunters();
+assert(S.mj.ambush&&S.mj.ambush.sect==='tm','追杀阶仇恨应触发截杀');
+assert(S.stones===st11-Math.floor(st11*0.05),'截杀应被夺走半成灵石');
+Math.random=rr11;
+S.ap=999999;
+mjHunterFight();
+assert(B&&B.e.mj&&B.e.mj.type==='hunter','应可反击追杀者');
+B.ehp=1;useSkill('bati');
+assert(hatredOf('tm')===40,'反杀追杀者应仇恨-80（120→40）');
+curTab='mijing';renderAll();
+curTab='market';renderAll();
+console.log('✅ 冒烟测试全部通过：全流程 / 45地图 / 2024灵植 / 627丹方·672丹药 / 每日修为上限 / 凝星丹力模型·一键凝聚 / 货币与飞升 / 210战技·222功法(含练体8部)·武功阁·宗门爬榜·肉身九秘·八维属性 / 九星塔 / 词缀 / 成就 / 每日悬赏 / 装备强化·灵兽升级 / 日程 / 混沌珠 / 存档迁移 / 关窍凝聚 / 魂修·丹火·丹炉·珠内炼丹 / 秘境·门派恩怨·丹方落名·商行两倍价');
+
 `;
 eval(sandboxWrap());
 function sandboxWrap(){
   for(const k in sandbox)globalThis[k]=sandbox[k];
-  fs.writeFileSync(path.join(__dirname,'combined.js'),data+'\n'+data2+'\n'+social+'\n'+data3+'\n'+soul+'\n'+game+'\n'+test);
+  fs.writeFileSync(path.join(__dirname,'combined.js'),data+'\n'+data2+'\n'+social+'\n'+data3+'\n'+soul+mijing+'\n'+game+'\n'+test);
   require('./combined.js');
 }

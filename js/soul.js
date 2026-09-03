@@ -153,11 +153,12 @@ function pearlDoCraft(rid){ // 校验+消耗+成丹判定；返回是否开炉
   else for(const m in rc.mats){if(m==='shouhe')need.c+=rc.mats[m];else need.h[m]=(need.h[m]||0)+rc.mats[m];}
   for(const k in need.h){
     if(k.slice(0,2)==='ge'){const t=+k.slice(2);if(herbsGE(t)<need.h[k]){toast('药材不足：需 '+t+' 品及以上灵植 x'+need.h[k]);return false;}}
-    else if((S.herbs[k]||0)<need.h[k]){toast('药材不足：'+(HERBS[k]?HERBS[k].n:k)+' x'+need.h[k]);return false;}
+    else{const have=(S.herbs[k]||0)+((k==='shouhe'||MATS[k])?(S.mats[k]||0):0);if(have<need.h[k]){toast('药材不足：'+(HERBS[k]?HERBS[k].n:(MATS[k]?MATS[k].n:k))+' x'+need.h[k]);return false;}}
   }
   if(need.c&&(S.mats.shouhe||0)<need.c){toast('兽核不足 x'+need.c);return false;}
   for(const k in need.h){
     if(k.slice(0,2)==='ge')consumeHerbsGE(+k.slice(2),need.h[k]);
+    else if(k==='shouhe'||MATS[k])S.mats[k]=(S.mats[k]||0)-need.h[k];
     else S.herbs[k]-=need.h[k];
   }
   if(need.c)S.mats.shouhe-=need.c;

@@ -51,6 +51,7 @@ function newState(){
     body:{li:0,lv:[0,0,0,0,0,0,0,0,0]},
     soc:{roster:[],dualBoost:0}, gifts:{},
     soul:{exp:0,gfs:{}}, flames:{}, natal:null, furnace:0, pearlAlch:{rid:'',day:0,used:0,auto:0},
+    mj:{day:0,used:0,hatred:{},rep:{},enc:null,ambush:null},
   };
 }
 function save(){ if(!S)return; S.lastTick=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
@@ -559,13 +560,13 @@ function craft(rid,n){ // 炼丹：n=连炼炉数（1/10/100）——材料一�
   else for(const m in rc.mats){if(m==='shouhe')need.c+=rc.mats[m]*n;else need.h[m]=(need.h[m]||0)+rc.mats[m]*n;}
   for(const k in need.h){
     if(k.slice(0,2)==='ge'){const t=+k.slice(2);if(herbsGE(t)<need.h[k]){toast('材料不足：需 '+need.h[k]+' 株 '+t+' 品及以上灵植（现有 '+herbsGE(t)+'）');return;}}
-    else{const have=(S.herbs[k]||0)+(k==='shouhe'?(S.mats.shouhe||0):0);if(have<need.h[k]){toast('材料不足：'+(HERBS[k]?HERBS[k].n:MATS[k].n)+' x'+need.h[k]);return;}}
+    else{const have=(S.herbs[k]||0)+((k==='shouhe'||MATS[k])?(S.mats[k]||0):0);if(have<need.h[k]){toast('材料不足：'+(HERBS[k]?HERBS[k].n:MATS[k].n)+' x'+need.h[k]);return;}}
   }
   if(need.c&&(S.mats.shouhe||0)<need.c){toast('材料不足：兽核 x'+need.c);return;}
   if(!useAp(AP_CRAFT,'炼丹'))return;
   for(const k in need.h){
     if(k.slice(0,2)==='ge')consumeHerbsGE(+k.slice(2),need.h[k]);
-    else if(k==='shouhe')S.mats.shouhe-=need.h[k];
+    else if(k==='shouhe'||MATS[k])S.mats[k]=(S.mats[k]||0)-need.h[k];
     else S.herbs[k]-=need.h[k];
   }
   if(need.c)S.mats.shouhe-=need.c;
@@ -735,8 +736,8 @@ function sellHerbsTier(t,keep){
 function buy(item){
   const r=curR();
   const list={
-    lingcao10:{cost:Math.floor(60*Math.pow(1.55,r)),give:()=>{S.herbs.lingcao=(S.herbs.lingcao||0)+10;},n:'灵草 x10'},
-    shouhe:{cost:Math.floor(50*Math.pow(1.55,r)),give:()=>{S.mats.shouhe=(S.mats.shouhe||0)+1;},n:'兽核 x1'},
+    lingcao10:{cost:herbPrice(1)*20,give:()=>{S.herbs.lingcao=(S.herbs.lingcao||0)+10;},n:'灵草 x10'},
+    shouhe:{cost:corePrice(r)*2,give:()=>{S.mats.shouhe=(S.mats.shouhe||0)+1;},n:'兽核 x1'},
     jigu:{cost:Math.floor(120*Math.pow(1.5,r)),give:()=>{S.pills.jigu=(S.pills.jigu||0)+1;},n:'祭骨丹 x1'},
     huiqi:{cost:Math.floor(100*Math.pow(1.55,r)),give:()=>{S.pills.huiqi=(S.pills.huiqi||0)+1;},n:'回气丹 x1'},
     julingzhui:{cost:20000,give:()=>{S.equips.julingzhui=1;equipItem('julingzhui');},n:'聚灵坠'},
@@ -912,11 +913,13 @@ function winBattle(){
   const qiGain=addQi(layerCost()*(0.05+0.02*ed.m)*(ed.boss?2.5:1)*gainMul,'battle');
   S.stat.kills=(S.stat.kills||0)+1;
   if(ed.boss)S.stat.bosses=(S.stat.bosses||0)+1;
-  bumpDaily('kill',1);bumpSect('kill',1);
+  bumpDaily('kill',1);if(ed.boss)bumpDaily('boss',1);bumpSect('kill',1);
   battleLog('【'+ed.n+'】轰然倒下！获得 '+drops+(qiGain>0?('，战意化灵，修为+'+fmt(qiGain)):'')+'。','good');
   log('good','斩杀【'+ed.n+'】！'+drops);
   if(B.zid==='sect'){
     winSectBattle();
+  }else if(B.zid==='mijing'){
+    winMijingBattle();
   }else if(B.zid==='tower'){
     const f=B.tower;
     if(f>(S.towerBest||0)){
@@ -1628,6 +1631,7 @@ function nextDay(){
     (ready?('　有 '+ready+' 株灵植已然成熟。'):''));
   if(S.cond<40)log('bad','状态萎靡——修炼缓慢、战力打折。多植神树、及早浇灌，方能日日精进。');
   pearlDaily();
+  mjHunters();
   ensureDaily();
   checkQuests();renderAll();save();
 }
@@ -1656,6 +1660,7 @@ function sellPill(pid,qty){
 const TABS=[
  {id:'cult',n:'修炼'},
  {id:'hunt',n:'历练'},
+ {id:'mijing',n:'秘境'},
  {id:'alchemy',n:'炼丹'},
  {id:'market',n:'商行'},
  {id:'pearl',n:'珠内'},
@@ -1956,13 +1961,46 @@ function renderPillStore(){
   }).join('');
 }
 /* ---------------- 华云商行 ---------------- */
-/* ---------------- 华云商行 ---------------- */
+/* 采购具名灵植/材料：买价 = 卖价 ×2（同一材料卖出再买回必亏一倍，杜绝等价替换刷钱） */
+let mktTier=1;
+function marketBuyHtml(){
+  const t=clamp(mktTier,1,10);
+  const pool=HERBS_BY_TIER[t]||[];
+  const opts=pool.map(id=>'<option value="'+id+'">'+HERBS[id].n+'（'+t+'品 · 买 '+fmtMoney(herbPrice(t)*2)+' '+moneyName()+'/株）</option>').join('');
+  return '<div class="panel"><h3>采购 · 灵植材料（买价 = 卖价两倍）</h3>'+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'+
+   '<select class="fin" id="mktTierSel" onchange="mktTier=+this.value;renderMarket()">'+
+   [1,2,3,4,5,6,7,8,9,10].map(x=>'<option value="'+x+'"'+(x===t?' selected':'')+'>'+x+' 品灵植</option>').join('')+
+   '</select>'+
+   '<select class="fin" id="mktHerbSel">'+opts+'</select>'+
+   '<button class="btn" onclick="buyHerb(document.getElementById(\'mktHerbSel\').value,1)">购 1 株</button>'+
+   '<button class="btn" onclick="buyHerb(document.getElementById(\'mktHerbSel\').value,10)">购 10 株</button>'+
+   '</div>'+
+   '<p class="small muted">2024 种灵植按名收购——炼丹要什么，商行就卖什么；买价恒为收购价的两倍。'+
+   '妖兽材料（妖丹/妖骨/内丹/龙鳞/神血晶/道纹石等）在右侧出售栏可随手买回（同为两倍价）。</p></div>';
+}
+function buyHerb(hid,n){
+  const h=HERBS[hid];if(!h)return;
+  n=clamp(n|0,1,99);
+  const cost=herbPrice(h.t)*2*n;
+  if(S.stones<cost){toast(moneyName()+'不足：需 '+fmtMoney(cost)+' '+moneyName());return;}
+  S.stones-=cost;S.herbs[hid]=(S.herbs[hid]||0)+n;
+  toast('购得 '+h.n+' x'+n,'good');renderAll();save();
+}
+function buyMat(id,n){
+  if(!MATS[id])return;
+  n=clamp(n|0,1,99);
+  const cost=matPrice(id,curR())*2*n;
+  if(S.stones<cost){toast(moneyName()+'不足：需 '+fmtMoney(cost)+' '+moneyName());return;}
+  S.stones-=cost;S.mats[id]=(S.mats[id]||0)+n;
+  toast('购得 '+MATS[id].n+' x'+n,'good');renderAll();save();
+}
 function renderMarket(){
   const r=curR();
   const pillsOwned=Object.keys(PILLS).filter(p=>(S.pills[p]||0)>0);
   const shopItems=[
-    {k:'lingcao10',n:'灵草 x10',d:'最常见的炼丹辅材',cost:Math.floor(60*Math.pow(1.55,r))},
-    {k:'shouhe',n:'兽核 x1',d:'炼丹材料，妖兽体内凝结',cost:Math.floor(50*Math.pow(1.55,r))},
+    {k:'lingcao10',n:'灵草 x10',d:'最常见的炼丹辅材',cost:herbPrice(1)*20},
+    {k:'shouhe',n:'兽核 x1',d:'炼丹材料，妖兽体内凝结',cost:corePrice(r)*2},
     {k:'jigu',n:'祭骨丹 x1',d:'锻骨境硬通货——此境拼的就是财力',cost:Math.floor(120*Math.pow(1.5,r))},
     {k:'huiqi',n:'回气丹 x1',d:'战斗中恢复六成气血',cost:Math.floor(100*Math.pow(1.55,r))},
     {k:'julingzhui',n:'聚灵坠',d:'修炼速度+35%（'+(S.equips.julingzhui?'已购':'仅此一件')+'）',cost:20000,dis:S.equips.julingzhui},
@@ -1981,6 +2019,7 @@ function renderMarket(){
    '<p class="small muted">华云商行，货通东荒。掌柜的满面堆笑：“客官里边请——今儿什么都有。”</p>'+
    shopItems.map(it=>'<div class="row-item"><div class="info"><div class="nm">'+it.n+'</div><div class="small muted">'+it.d+'</div></div>'+
      '<button class="btn" '+(it.dis?'disabled':'')+' onclick="buy(\''+it.k+'\')">'+fmtMoney(it.cost)+' '+moneyName()+'</button></div>').join('')+
+   marketBuyHtml()+
    '</div></div><div>'+
    '<div class="panel"><h3>华云商行 · 出售</h3>'+
    '<p class="small muted">行商不问来路，收尽天下奇珍——千种灵植按品阶整批收购。神兵法宝认主，恕不收购。</p>'+
@@ -2426,6 +2465,7 @@ function renderAll(){
   renderTabs();renderTop();
   if(curTab==='cult')renderCult();
   else if(curTab==='hunt')renderHunt();
+  else if(curTab==='mijing')renderMijing();
   else if(curTab==='alchemy')renderAlchemy();
   else if(curTab==='market')renderMarket();
   else if(curTab==='pearl')renderPearl();
