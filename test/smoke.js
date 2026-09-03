@@ -5,7 +5,7 @@ const el=()=>({innerHTML:'',textContent:'',value:'',scrollTop:0,scrollHeight:0,s
 const sandbox={
   console,Math,JSON,Date,isFinite,isNaN,parseInt,parseFloat,String,Number,Array,Object,
   setInterval:()=>0,clearInterval:()=>{},setTimeout:()=>0,
-  document:{getElementById:()=>el(),querySelector:()=>null,createElement:()=>({remove(){}}),addEventListener(){}},
+  document:{getElementById:()=>el(),querySelector:()=>null,querySelectorAll:()=>[],createElement:()=>({remove(){}}),addEventListener(){}},
   localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
   location:{reload(){}},window:{addEventListener(){}},
   innerWidth:1200,innerHeight:800,requestAnimationFrame:()=>0,

@@ -1768,6 +1768,8 @@ function renderHunt(){
        (B.over?'<button class="btn" onclick="endBattleView()">离开战斗</button>':'<button class="btn danger" onclick="flee()">逃跑</button>')+
      '</div></div>';
   }
+  // DOM read before rebuild - safer than ontoggle timing
+  document.querySelectorAll('details.zgrp[data-k]').forEach(function(d){if(d.open)ZGRP_OPEN[d.getAttribute('data-k')]=true;});
   html+=renderZoneGroups();
   $('main').innerHTML=html;
   const bl=document.querySelector('.battlelog');
@@ -1800,7 +1802,7 @@ function renderZoneGroups(){
     if(!zs.length)continue;
     const cards=zs.map(zoneCard).join('');
     if(r===curR())html+=cards;
-    else html+='<details class="zgrp"'+(ZGRP_OPEN['past'+r]?' open':'')+' ontoggle="ZGRP_OPEN.past'+r+'=this.open"><summary>往昔地界 · '+REALMS[r].name+'（'+zs.length+' 处地图）</summary>'+cards+'</details>';
+    else html+='<details class="zgrp" data-k="past'+r+'"'+(ZGRP_OPEN['past'+r]?' open':'')+' ontoggle="ZGRP_OPEN.past'+r+'=this.open"><summary>往昔地界 · '+REALMS[r].name+'（'+zs.length+' 处地图）</summary>'+cards+'</details>';
   }
   const locked=ZONESLIST().filter(z=>z.reqR>curR());
   if(locked.length){
@@ -1811,7 +1813,7 @@ function renderZoneGroups(){
     }
     const sect=locked.filter(z=>z.sect);
     if(sect.length)inner+='<div class="small muted" style="margin:2px 0">紫血宗属地（拜入宗门后开启）：'+sect.map(z=>z.name).join('、')+'</div>';
-    html+='<details class="zgrp"'+(ZGRP_OPEN.locked?' open':'')+' ontoggle="ZGRP_OPEN.locked=this.open"><summary>远处地界 · 尚未踏足（'+locked.length+' 处，随修为解锁）</summary>'+inner+'</details>';
+    html+='<details class="zgrp" data-k="locked"'+(ZGRP_OPEN.locked?' open':'')+' ontoggle="ZGRP_OPEN.locked=this.open"><summary>远处地界 · 尚未踏足（'+locked.length+' 处，随修为解锁）</summary>'+inner+'</details>';
   }
   return html;
 }
